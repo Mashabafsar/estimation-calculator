@@ -1,0 +1,161 @@
+import { useEffect, useState } from 'react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+  Line,
+  LineChart,
+} from 'recharts';
+import { api, money, pct } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+
+interface DashboardData {
+  kpis: {
+    totalEstimates: number;
+    wonDeals: number;
+    lostDeals: number;
+    averageMargin: number;
+    averageSellingPrice: number;
+    averageDevelopmentCost: number;
+    averageProjectDuration: number;
+    revenuePipeline: number;
+    monthlyEstimatedRevenue: number;
+    resourceUtilization: number;
+    marginDistribution: { green: number; yellow: number; red: number };
+  };
+  charts: {
+    monthlyRevenue: Array<{ month: string; revenue: number }>;
+    marginTrend: Array<{ month: string; marginPct: number }>;
+    costBreakdown: { labour: number; commission: number; cogs: number; expenses: number };
+    resourceBreakdown: Array<{ role: string; hours: number }>;
+    dealStatus: Array<{ status: string; count: number }>;
+  };
+}
+
+const COLORS = ['#0f766e', '#0ea5e9', '#f59e0b', '#e11d48', '#8b5cf6', '#64748b'];
+
+function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="card p-4">
+      <div className="text-xs uppercase tracking-wide text-[var(--color-muted)] font-semibold">{label}</div>
+      <div className="mt-2 text-2xl font-semibold tracking-tight">{value}</div>
+      {hint && <div className="mt-1 text-xs text-[var(--color-muted)]">{hint}</div>}
+    </div>
+  );
+}
+
+export function DashboardPage() {
+  const { token } = useAuth();
+  const [data, setData] = useState<DashboardData | null>(null);
+
+  useEffect(() => {
+    api<DashboardData>('/dashboard', { token }).then(setData).catch(console.error);
+  }, [token]);
+
+  if (!data) return <div className="text-[var(--color-muted)]">Loading dashboard…</div>;
+
+  const costData = Object.entries(data.charts.costBreakdown).map(([name, value]) => ({ name, value }));
+  const marginPie = [
+    { name: 'Green ≥50%', value: data.kpis.marginDistribution.green, color: '#047857' },
+    { name: 'Yellow 40–50%', value: data.kpis.marginDistribution.yellow, color: '#b45309' },
+    { name: 'Red <40%', value: data.kpis.marginDistribution.red, color: '#be123c' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <p className="text-sm text-[var(--color-muted)]">Pipeline health, margins, and resource load.</p>
+      </div>
+
+      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <Kpi label="Total Estimates" value={String(data.kpis.totalEstimates)} />
+        <Kpi label="Won / Lost" value={`${data.kpis.wonDeals} / ${data.kpis.lostDeals}`} />
+        <Kpi label="Average Margin" value={pct(data.kpis.averageMargin)} />
+        <Kpi label="Revenue Pipeline" value={money(data.kpis.revenuePipeline)} />
+        <Kpi label="Avg Selling Price" value={money(data.kpis.averageSellingPrice)} />
+        <Kpi label="Avg Dev Cost" value={money(data.kpis.averageDevelopmentCost)} />
+        <Kpi
+          label="Avg Duration"
+          value={`${Math.round(data.kpis.averageProjectDuration || 0)}d`}
+        />
+        <Kpi label="Resource Utilization" value={pct(data.kpis.resourceUtilization, 0)} />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <div className="card p-4 h-80">
+          <div className="text-sm font-semibold mb-3">Monthly Revenue</div>
+          <ResponsiveContainer width="100%" height="90%">
+            <BarChart data={data.charts.monthlyRevenue}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Bar dataKey="revenue" fill="#0f766e" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="card p-4 h-80">
+          <div className="text-sm font-semibold mb-3">Margin %</div>
+          <ResponsiveContainer width="100%" height="90%">
+            <LineChart data={data.charts.marginTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Line type="monotone" dataKey="marginPct" stroke="#0ea5e9" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="card p-4 h-80">
+          <div className="text-sm font-semibold mb-3">Cost Breakdown</div>
+          <ResponsiveContainer width="100%" height="90%">
+            <PieChart>
+              <Pie data={costData} dataKey="value" nameKey="name" outerRadius={90} label>
+                {costData.map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="card p-4 h-80">
+          <div className="text-sm font-semibold mb-3">Margin Health</div>
+          <ResponsiveContainer width="100%" height="90%">
+            <PieChart>
+              <Pie data={marginPie} dataKey="value" nameKey="name" outerRadius={90} label>
+                {marginPie.map((d, i) => (
+                  <Cell key={i} fill={d.color} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="card p-4 h-80 lg:col-span-2">
+          <div className="text-sm font-semibold mb-3">Resource Breakdown (hours)</div>
+          <ResponsiveContainer width="100%" height="90%">
+            <BarChart data={data.charts.resourceBreakdown}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
+              <XAxis dataKey="role" tick={{ fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={70} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Bar dataKey="hours" fill="#0284c7" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}

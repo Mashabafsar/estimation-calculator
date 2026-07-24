@@ -1,0 +1,30 @@
+{
+  "name": "project-estimation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Internal Project Estimation & Profitability System",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @estimation/api\" \"npm run dev -w @estimation/web\"",
+    "dev:api": "npm run dev -w @estimation/api",
+    "dev:web": "npm run dev -w @estimation/web",
+    "build": "npm run build -w @estimation/api && npm run build -w @estimation/web",
+    "db:generate": "npm run db:generate -w @estimation/api",
+    "db:migrate": "npm run db:migrate -w @estimation/api",
+    "db:seed": "npm run db:seed -w @estimation/api",
+    "db:reset": "npm run db:reset -w @estimation/api",
+    "lint": "npm run lint -w @estimation/api && npm run lint -w @estimation/web",
+    "test": "npm run test -w @estimation/api",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

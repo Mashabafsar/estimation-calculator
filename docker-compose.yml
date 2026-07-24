@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: estimation-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-estimation}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-estimation}
+      POSTGRES_DB: ${POSTGRES_DB:-estimation}
+    ports:
+      - "5433:5432"
+    volumes:
+      - estimation_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-estimation} -d ${POSTGRES_DB:-estimation}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: estimation-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-estimation}:${POSTGRES_PASSWORD:-estimation}@postgres:5432/${POSTGRES_DB:-estimation}?schema=public
+      API_PORT: 4001
+      API_HOST: 0.0.0.0
+    ports:
+      - "4001:4001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:4001/api
+    container_name: estimation-web
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  estimation_pgdata:
