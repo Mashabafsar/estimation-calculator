@@ -20,6 +20,12 @@ async function upsertSetting(
 }
 
 async function main() {
+  const existingAdmin = await prisma.user.findUnique({ where: { email: 'admin@estimation.local' } });
+  if (existingAdmin) {
+    console.log('Database already seeded, skipping.');
+    return;
+  }
+
   console.log('Seeding database...');
 
   const usd = await prisma.currency.upsert({
