@@ -19,14 +19,13 @@ export async function getDashboard() {
   const active = estimates.filter((e) => e.status !== EstimateStatus.ARCHIVED);
   const won = active.filter((e) => e.status === EstimateStatus.WON);
   const lost = active.filter((e) => e.status === EstimateStatus.LOST);
-  const pipeline = active.filter((e) =>
-    [
-      EstimateStatus.DRAFT,
-      EstimateStatus.PRE_SALES_REVIEW,
-      EstimateStatus.MANAGEMENT_REVIEW,
-      EstimateStatus.APPROVED,
-    ].includes(e.status),
-  );
+  const pipelineStatuses = new Set<EstimateStatus>([
+    EstimateStatus.DRAFT,
+    EstimateStatus.PRE_SALES_REVIEW,
+    EstimateStatus.MANAGEMENT_REVIEW,
+    EstimateStatus.APPROVED,
+  ]);
+  const pipeline = active.filter((e) => pipelineStatuses.has(e.status));
 
   const withCalc = active.filter((e) => e.calculation);
   const margins = withCalc.map((e) => Number(e.calculation!.grossMarginPct));
