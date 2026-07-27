@@ -8,13 +8,13 @@ Internal pre-sales estimation platform for software services companies. Migrates
 |-------|------|
 | Frontend | React, Vite, TailwindCSS, React Hook Form, TanStack Table, Recharts |
 | Backend | Node.js, Express, Prisma, Zod, JWT |
-| Database | PostgreSQL (Docker on host port **5433**) |
+| Database | PostgreSQL (Docker on host port **5434**) |
 | Auth | JWT + role-based access |
 
 ## Quick start
 
 ```bash
-# 1. Start Postgres (port 5433 — does not conflict with chatbot on 5432)
+# 1. Start Postgres (port 5434 — avoids chatbot on 5432/5433)
 docker compose up -d postgres
 
 # 2. Install dependencies
@@ -76,4 +76,4 @@ See [docs/CALCULATION_ENGINE.md](docs/CALCULATION_ENGINE.md).
 docker compose up -d --build
 ```
 
-Postgres: `localhost:5433` · API: `4001` · Web: `5173`
+Postgres: `localhost:5434` · API: `4001` · Web: `5173`
