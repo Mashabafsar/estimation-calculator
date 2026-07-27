@@ -1,7 +1,7 @@
 # Implementation Roadmap
 
 ## Milestone 1 — Foundation (done)
-- Monorepo, Docker Postgres on 5433
+- Monorepo, Docker Postgres on 5434
 - Prisma schema + seed data (roles, templates, settings, payment terms, sample estimates)
 - Calculation engine ported from Excel/HTML + unit tests
 - JWT auth + RBAC middleware
