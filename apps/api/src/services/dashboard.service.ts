@@ -80,16 +80,27 @@ export async function getDashboard() {
     expenses: withCalc.reduce((s, e) => s + Number(e.calculation!.expenseTotal), 0),
   };
 
-  const roleHours = new Map<string, number>();
+  const roleHours = new Map<string, { hours: number; cost: number; revenue: number }>();
   for (const e of active) {
     for (const r of e.resources) {
-      roleHours.set(r.roleName, (roleHours.get(r.roleName) ?? 0) + Number(r.hours));
+      const row = roleHours.get(r.roleName) ?? { hours: 0, cost: 0, revenue: 0 };
+      row.hours += Number(r.hours);
+      row.cost += Number(r.totalCost);
+      row.revenue += Number(r.totalRevenue);
+      roleHours.set(r.roleName, row);
     }
   }
   const resourceBreakdown = [...roleHours.entries()]
-    .map(([role, hours]) => ({ role, hours }))
+    .map(([role, v]) => ({
+      role,
+      hours: Math.round(v.hours * 100) / 100,
+      cost: Math.round(v.cost * 100) / 100,
+      revenue: Math.round(v.revenue * 100) / 100,
+    }))
     .sort((a, b) => b.hours - a.hours)
     .slice(0, 12);
+
+  const departmentConsumption = resourceBreakdown;
 
   const marginTrend = monthlyRevenue.map(({ month }) => {
     const monthEstimates = withCalc.filter((e) => {
@@ -122,6 +133,7 @@ export async function getDashboard() {
       marginTrend,
       costBreakdown,
       resourceBreakdown,
+      departmentConsumption,
       dealStatus,
       marginDistribution,
     },

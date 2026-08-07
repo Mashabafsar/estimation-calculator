@@ -1,8 +1,19 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, useFieldArray } from 'react-hook-form';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { api, money, pct } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { MarginHealthBox } from '../components/MarginHealth';
 
 interface Role {
   id: string;
@@ -491,45 +502,81 @@ export function EstimateFormPage() {
           </div>
 
           {calc?.departmentTotals?.length ? (
-            <div className="card overflow-hidden">
-              <div className="px-4 py-3 border-b border-[var(--color-line)] font-semibold">
-                Department Hours Totals
+            <>
+              <div className="card p-4 h-72">
+                <div className="text-sm font-semibold mb-1">Department Consumption</div>
+                <ResponsiveContainer width="100%" height="90%">
+                  <BarChart data={calc.departmentTotals} margin={{ bottom: 36 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
+                    <XAxis
+                      dataKey="department"
+                      tick={{ fontSize: 10 }}
+                      interval={0}
+                      angle={-20}
+                      textAnchor="end"
+                      height={55}
+                    />
+                    <YAxis yAxisId="left" tick={{ fontSize: 11 }} />
+                    <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} />
+                    <Tooltip
+                      formatter={(value: number, name: string) =>
+                        name === 'hours'
+                          ? [`${value}h`, 'Hours']
+                          : [money(value), name === 'totalCost' ? 'Cost' : 'Revenue']
+                      }
+                    />
+                    <Legend />
+                    <Bar yAxisId="left" dataKey="hours" name="Hours" fill="#0284c7" radius={[4, 4, 0, 0]} />
+                    <Bar
+                      yAxisId="right"
+                      dataKey="totalCost"
+                      name="Cost"
+                      fill="#0f766e"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-              <table className="w-full text-sm">
-                <thead className="text-left text-[var(--color-muted)] bg-[var(--color-canvas)]">
-                  <tr>
-                    <th className="px-4 py-2">Department</th>
-                    <th className="px-4 py-2">Hours</th>
-                    <th className="px-4 py-2">% Hours</th>
-                    <th className="px-4 py-2">Avg Cost</th>
-                    <th className="px-4 py-2">Avg Bill</th>
-                    <th className="px-4 py-2">Total Cost</th>
-                    <th className="px-4 py-2">Total Revenue</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {calc.departmentTotals.map((d) => (
-                    <tr key={d.department} className="border-t border-[var(--color-line)]">
-                      <td className="px-4 py-2 font-medium">{d.department}</td>
-                      <td className="px-4 py-2">{d.hours}</td>
-                      <td className="px-4 py-2">{pct(d.pctOfHours)}</td>
-                      <td className="px-4 py-2">${d.hourlyCost.toFixed(2)}</td>
-                      <td className="px-4 py-2">${d.hourlyBilling.toFixed(2)}</td>
-                      <td className="px-4 py-2">{money(d.totalCost)}</td>
-                      <td className="px-4 py-2">{money(d.totalRevenue)}</td>
+              <div className="card overflow-hidden">
+                <div className="px-4 py-3 border-b border-[var(--color-line)] font-semibold">
+                  Department Hours Totals
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="text-left text-[var(--color-muted)] bg-[var(--color-canvas)]">
+                    <tr>
+                      <th className="px-4 py-2">Department</th>
+                      <th className="px-4 py-2">Hours</th>
+                      <th className="px-4 py-2">% Hours</th>
+                      <th className="px-4 py-2">Avg Cost</th>
+                      <th className="px-4 py-2">Avg Bill</th>
+                      <th className="px-4 py-2">Total Cost</th>
+                      <th className="px-4 py-2">Total Revenue</th>
                     </tr>
-                  ))}
-                  <tr className="border-t border-[var(--color-line)] bg-[var(--color-canvas)] font-semibold">
-                    <td className="px-4 py-2">Total</td>
-                    <td className="px-4 py-2">{calc.totalHours}</td>
-                    <td className="px-4 py-2">100%</td>
-                    <td className="px-4 py-2" colSpan={2} />
-                    <td className="px-4 py-2">{money(calc.labourCost)}</td>
-                    <td className="px-4 py-2">{money(calc.labourRevenue)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {calc.departmentTotals.map((d) => (
+                      <tr key={d.department} className="border-t border-[var(--color-line)]">
+                        <td className="px-4 py-2 font-medium">{d.department}</td>
+                        <td className="px-4 py-2">{d.hours}</td>
+                        <td className="px-4 py-2">{pct(d.pctOfHours)}</td>
+                        <td className="px-4 py-2">${d.hourlyCost.toFixed(2)}</td>
+                        <td className="px-4 py-2">${d.hourlyBilling.toFixed(2)}</td>
+                        <td className="px-4 py-2">{money(d.totalCost)}</td>
+                        <td className="px-4 py-2">{money(d.totalRevenue)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-[var(--color-line)] bg-[var(--color-canvas)] font-semibold">
+                      <td className="px-4 py-2">Total</td>
+                      <td className="px-4 py-2">{calc.totalHours}</td>
+                      <td className="px-4 py-2">100%</td>
+                      <td className="px-4 py-2" colSpan={2} />
+                      <td className="px-4 py-2">{money(calc.labourCost)}</td>
+                      <td className="px-4 py-2">{money(calc.labourRevenue)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : null}
 
           {calc?.sprintBreakdown?.length ? (
@@ -600,6 +647,11 @@ export function EstimateFormPage() {
             )}
             {calc && (
               <>
+                <MarginHealthBox
+                  health={calc.marginHealth}
+                  marginPct={calc.grossMarginPct}
+                  className="mb-1"
+                />
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <div className="text-[var(--color-muted)] text-xs">Engagement Fee</div>

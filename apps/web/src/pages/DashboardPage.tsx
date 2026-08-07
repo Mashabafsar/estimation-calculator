@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { api, money, pct } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { MarginHealthLegend } from '../components/MarginHealth';
 
 interface DashboardData {
   kpis: {
@@ -35,7 +36,8 @@ interface DashboardData {
     monthlyRevenue: Array<{ month: string; revenue: number }>;
     marginTrend: Array<{ month: string; marginPct: number }>;
     costBreakdown: { labour: number; commission: number; cogs: number; expenses: number };
-    resourceBreakdown: Array<{ role: string; hours: number }>;
+    resourceBreakdown: Array<{ role: string; hours: number; cost?: number; revenue?: number }>;
+    departmentConsumption: Array<{ role: string; hours: number; cost: number; revenue: number }>;
     dealStatus: Array<{ status: string; count: number }>;
   };
 }
@@ -68,6 +70,15 @@ export function DashboardPage() {
     { name: 'Yellow 40–50%', value: data.kpis.marginDistribution.yellow, color: '#b45309' },
     { name: 'Red <40%', value: data.kpis.marginDistribution.red, color: '#be123c' },
   ];
+  const deptData =
+    data.charts.departmentConsumption?.length
+      ? data.charts.departmentConsumption
+      : data.charts.resourceBreakdown.map((r) => ({
+          role: r.role,
+          hours: r.hours,
+          cost: r.cost ?? 0,
+          revenue: r.revenue ?? 0,
+        }));
 
   return (
     <div className="space-y-6">
@@ -88,6 +99,11 @@ export function DashboardPage() {
           value={`${Math.round(data.kpis.averageProjectDuration || 0)}d`}
         />
         <Kpi label="Resource Utilization" value={pct(data.kpis.resourceUtilization, 0)} />
+      </div>
+
+      <div className="card p-4 space-y-3">
+        <div className="text-sm font-semibold">Margin Health Overview</div>
+        <MarginHealthLegend distribution={data.kpis.marginDistribution} />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
@@ -130,7 +146,7 @@ export function DashboardPage() {
           </ResponsiveContainer>
         </div>
         <div className="card p-4 h-80">
-          <div className="text-sm font-semibold mb-3">Margin Health</div>
+          <div className="text-sm font-semibold mb-3">Margin Health Mix</div>
           <ResponsiveContainer width="100%" height="90%">
             <PieChart>
               <Pie data={marginPie} dataKey="value" nameKey="name" outerRadius={90} label>
@@ -143,15 +159,32 @@ export function DashboardPage() {
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <div className="card p-4 h-80 lg:col-span-2">
-          <div className="text-sm font-semibold mb-3">Resource Breakdown (hours)</div>
-          <ResponsiveContainer width="100%" height="90%">
-            <BarChart data={data.charts.resourceBreakdown}>
+        <div className="card p-4 h-[26rem] lg:col-span-2">
+          <div className="text-sm font-semibold mb-1">Department Consumption</div>
+          <p className="text-xs text-[var(--color-muted)] mb-3">
+            Hours and cost across all selected departments in active estimates.
+          </p>
+          <ResponsiveContainer width="100%" height="85%">
+            <BarChart data={deptData} margin={{ bottom: 48 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
-              <XAxis dataKey="role" tick={{ fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={70} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Bar dataKey="hours" fill="#0284c7" radius={[6, 6, 0, 0]} />
+              <XAxis
+                dataKey="role"
+                tick={{ fontSize: 11 }}
+                interval={0}
+                angle={-25}
+                textAnchor="end"
+                height={70}
+              />
+              <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
+              <Tooltip
+                formatter={(value: number, name: string) =>
+                  name === 'hours' ? [`${value}h`, 'Hours'] : [money(value), name === 'cost' ? 'Cost' : 'Revenue']
+                }
+              />
+              <Legend />
+              <Bar yAxisId="left" dataKey="hours" name="Hours" fill="#0284c7" radius={[6, 6, 0, 0]} />
+              <Bar yAxisId="right" dataKey="cost" name="Cost" fill="#0f766e" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

@@ -9,6 +9,7 @@ import {
 import { Plus } from 'lucide-react';
 import { api, money, pct } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { MarginHealthBadge } from '../components/MarginHealth';
 
 interface EstimateRow {
   id: string;
@@ -26,15 +27,6 @@ interface EstimateRow {
 }
 
 const helper = createColumnHelper<EstimateRow>();
-
-function healthBadge(health?: string) {
-  const map: Record<string, string> = {
-    GREEN: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
-    YELLOW: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200',
-    RED: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200',
-  };
-  return map[health || ''] || 'bg-slate-100 text-slate-700';
-}
 
 export function EstimatesPage() {
   const { token } = useAuth();
@@ -73,8 +65,9 @@ export function EstimatesPage() {
         id: 'margin',
         header: 'Margin',
         cell: (info) => (
-          <span className={`badge ${healthBadge(info.row.original.calculation?.marginHealth)}`}>
-            {pct(info.getValue())}
+          <span className="inline-flex items-center gap-2">
+            <MarginHealthBadge health={info.row.original.calculation?.marginHealth} />
+            <span className="text-xs text-[var(--color-muted)]">{pct(info.getValue())}</span>
           </span>
         ),
       }),

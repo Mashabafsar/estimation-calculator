@@ -1,7 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { api, money, pct } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
+import { MarginHealthBox } from '../components/MarginHealth';
 
 export function EstimateDetailPage() {
   const { id } = useParams();
@@ -104,12 +115,11 @@ export function EstimateDetailPage() {
         </div>
         <div className="card p-4">
           <div className="text-xs text-[var(--color-muted)]">Direct Margin</div>
-          <div className="font-semibold mt-1">{money(calc?.directMargin)} ({pct(calc?.grossMarginPct)})</div>
+          <div className="font-semibold mt-1">
+            {money(calc?.directMargin)} ({pct(calc?.grossMarginPct)})
+          </div>
         </div>
-        <div className="card p-4">
-          <div className="text-xs text-[var(--color-muted)]">Margin Health</div>
-          <div className="font-semibold mt-1">{calc?.marginHealth}</div>
-        </div>
+        <MarginHealthBox health={calc?.marginHealth} marginPct={calc?.grossMarginPct} />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
@@ -170,33 +180,71 @@ export function EstimateDetailPage() {
       </div>
 
       {Array.isArray(calc?.departmentTotals) && calc.departmentTotals.length > 0 && (
-        <div className="card overflow-hidden">
-          <div className="px-4 py-3 border-b border-[var(--color-line)] font-semibold">
-            Department Hours Totals
+        <>
+          <div className="card p-4 h-80">
+            <div className="text-sm font-semibold mb-1">Department Consumption</div>
+            <p className="text-xs text-[var(--color-muted)] mb-2">Hours and cost by department</p>
+            <ResponsiveContainer width="100%" height="85%">
+              <BarChart data={calc.departmentTotals} margin={{ bottom: 40 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-line)" />
+                <XAxis
+                  dataKey="department"
+                  tick={{ fontSize: 11 }}
+                  interval={0}
+                  angle={-20}
+                  textAnchor="end"
+                  height={60}
+                />
+                <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
+                <Tooltip
+                  formatter={(value: number, name: string) =>
+                    name === 'hours'
+                      ? [`${value}h`, 'Hours']
+                      : [money(value), name === 'totalCost' ? 'Cost' : 'Revenue']
+                  }
+                />
+                <Legend />
+                <Bar yAxisId="left" dataKey="hours" name="Hours" fill="#0284c7" radius={[6, 6, 0, 0]} />
+                <Bar
+                  yAxisId="right"
+                  dataKey="totalCost"
+                  name="Cost"
+                  fill="#0f766e"
+                  radius={[6, 6, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-          <table className="w-full text-sm">
-            <thead className="text-left text-[var(--color-muted)] bg-[var(--color-canvas)]">
-              <tr>
-                <th className="px-4 py-2">Department</th>
-                <th className="px-4 py-2">Hours</th>
-                <th className="px-4 py-2">% Hours</th>
-                <th className="px-4 py-2">Total Cost</th>
-                <th className="px-4 py-2">Total Revenue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {calc.departmentTotals.map((d: any) => (
-                <tr key={d.department} className="border-t border-[var(--color-line)]">
-                  <td className="px-4 py-2 font-medium">{d.department}</td>
-                  <td className="px-4 py-2">{d.hours}</td>
-                  <td className="px-4 py-2">{pct(d.pctOfHours)}</td>
-                  <td className="px-4 py-2">{money(d.totalCost)}</td>
-                  <td className="px-4 py-2">{money(d.totalRevenue)}</td>
+
+          <div className="card overflow-hidden">
+            <div className="px-4 py-3 border-b border-[var(--color-line)] font-semibold">
+              Department Hours Totals
+            </div>
+            <table className="w-full text-sm">
+              <thead className="text-left text-[var(--color-muted)] bg-[var(--color-canvas)]">
+                <tr>
+                  <th className="px-4 py-2">Department</th>
+                  <th className="px-4 py-2">Hours</th>
+                  <th className="px-4 py-2">% Hours</th>
+                  <th className="px-4 py-2">Total Cost</th>
+                  <th className="px-4 py-2">Total Revenue</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {calc.departmentTotals.map((d: any) => (
+                  <tr key={d.department} className="border-t border-[var(--color-line)]">
+                    <td className="px-4 py-2 font-medium">{d.department}</td>
+                    <td className="px-4 py-2">{d.hours}</td>
+                    <td className="px-4 py-2">{pct(d.pctOfHours)}</td>
+                    <td className="px-4 py-2">{money(d.totalCost)}</td>
+                    <td className="px-4 py-2">{money(d.totalRevenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {Array.isArray(calc?.sprintBreakdown) && calc.sprintBreakdown.length > 0 && (
