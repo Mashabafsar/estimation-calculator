@@ -47,6 +47,11 @@ export interface PaymentTermRule {
   terms: string;
 }
 
+export interface SprintMilestoneInput {
+  name: string;
+  percentage: number; // 0–1 share of fee / hours
+}
+
 export interface CalculateInput {
   resources: CalcResourceInput[];
   expenses: CalcExpenseInput[];
@@ -54,6 +59,32 @@ export interface CalculateInput {
   settings: CalcSettings;
   paymentTerms: PaymentTermRule[];
   projectDurationDays?: number | null;
+  /** Number of delivery sprints (used when sprintPlan not provided) */
+  sprintCount?: number | null;
+  /** Weeks per sprint (informational / timeline) */
+  sprintWeeks?: number | null;
+  /** Custom milestone plan (from template or estimate). Percentages 0–1. */
+  sprintPlan?: SprintMilestoneInput[] | null;
+}
+
+export interface DepartmentTotal {
+  department: string;
+  hours: number;
+  hourlyCost: number;
+  hourlyBilling: number;
+  totalCost: number;
+  totalRevenue: number;
+  pctOfHours: number;
+}
+
+export interface SprintBreakdownItem {
+  name: string;
+  order: number;
+  percentage: number;
+  amount: number;
+  hours: number;
+  weeks?: number;
+  departmentHours: Array<{ department: string; hours: number; cost: number; revenue: number }>;
 }
 
 export type MarginHealth = 'GREEN' | 'YELLOW' | 'RED';
@@ -126,6 +157,12 @@ export interface CalculateResult {
     amount: number;
     isRecurring: boolean;
   }>;
+  /** Aggregated hours/cost/revenue per selected department (role) — Hours Breakdown sheet */
+  departmentTotals: DepartmentTotal[];
+  /** Milestone / sprint payment + effort allocation — Payment Breakdown sheet */
+  sprintBreakdown: SprintBreakdownItem[];
+  sprintCount: number;
+  sprintWeeks: number;
 }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -147,6 +184,129 @@ function marginHealth(pct: number): MarginHealth {
   if (pct >= 50) return 'GREEN';
   if (pct >= 40) return 'YELLOW';
   return 'RED';
+}
+
+/** Aggregate selected resources by department/role (Excel Hours Breakdown totals). */
+export function buildDepartmentTotals(
+  resources: Array<{
+    roleName: string;
+    hours: number;
+    hourlyCost: number;
+    hourlyBilling: number;
+    totalCost: number;
+    totalRevenue: number;
+  }>,
+): DepartmentTotal[] {
+  const map = new Map<
+    string,
+    { hours: number; costWeighted: number; billWeighted: number; totalCost: number; totalRevenue: number }
+  >();
+
+  for (const r of resources) {
+    if (!r.hours && !r.totalCost && !r.totalRevenue) continue;
+    const key = r.roleName || 'Unassigned';
+    const row = map.get(key) ?? {
+      hours: 0,
+      costWeighted: 0,
+      billWeighted: 0,
+      totalCost: 0,
+      totalRevenue: 0,
+    };
+    row.hours += r.hours;
+    row.costWeighted += r.hourlyCost * r.hours;
+    row.billWeighted += r.hourlyBilling * r.hours;
+    row.totalCost += r.totalCost;
+    row.totalRevenue += r.totalRevenue;
+    map.set(key, row);
+  }
+
+  const totalHours = [...map.values()].reduce((s, r) => s + r.hours, 0);
+  return [...map.entries()]
+    .map(([department, r]) => ({
+      department,
+      hours: round2(r.hours),
+      hourlyCost: round4(safeDiv(r.costWeighted, r.hours)),
+      hourlyBilling: round4(safeDiv(r.billWeighted, r.hours)),
+      totalCost: round2(r.totalCost),
+      totalRevenue: round2(r.totalRevenue),
+      pctOfHours: round4(safeDiv(r.hours, totalHours) * 100),
+    }))
+    .sort((a, b) => b.hours - a.hours);
+}
+
+/**
+ * Default sprint/payment plan inspired by Boxer Property estimate workbook.
+ * Percentages sum to 1.0.
+ */
+export function defaultSprintPlan(sprintCount = 10): SprintMilestoneInput[] {
+  const n = Math.max(1, Math.min(sprintCount, 20));
+  const advance = 0.2;
+  const design = 0.12;
+  const warranty = 0.03; // 1% × 3 months
+  const sit = 0.1;
+  const uat = 0.07;
+  const deliveryPool = Math.max(0, 1 - advance - design - sit - uat - warranty);
+  const perSprint = deliveryPool / n;
+
+  const plan: SprintMilestoneInput[] = [
+    { name: 'Advance Payment – Due upon acceptance', percentage: advance },
+    { name: 'Payment – Upon Completion of Design Phase', percentage: design },
+  ];
+  for (let i = 1; i <= n; i++) {
+    plan.push({ name: `Payment – Upon Completion of Sprint ${i}`, percentage: round4(perSprint) });
+  }
+  plan.push({ name: 'Payment – Upon Completion of SIT', percentage: sit });
+  plan.push({ name: 'Payment – Upon Completion of UAT', percentage: uat });
+  plan.push({ name: 'Payment – Warranty Period – Month 1', percentage: 0.01 });
+  plan.push({ name: 'Payment – Warranty Period – Month 2', percentage: 0.01 });
+  plan.push({ name: 'Payment – Warranty Period – Month 3', percentage: 0.01 });
+
+  // Fix rounding drift on last delivery sprint
+  const sum = plan.reduce((s, p) => s + p.percentage, 0);
+  if (Math.abs(sum - 1) > 0.0001 && plan.length > 2) {
+    const drift = round4(1 - sum);
+    const idx = 2 + n - 1; // last delivery sprint
+    if (plan[idx]) plan[idx].percentage = round4(plan[idx].percentage + drift);
+  }
+  return plan;
+}
+
+export function buildSprintBreakdown(opts: {
+  fee: number;
+  totalHours: number;
+  departmentTotals: DepartmentTotal[];
+  sprintPlan?: SprintMilestoneInput[] | null;
+  sprintCount?: number | null;
+  sprintWeeks?: number | null;
+}): SprintBreakdownItem[] {
+  const weeks = opts.sprintWeeks && opts.sprintWeeks > 0 ? opts.sprintWeeks : 2;
+  const plan =
+    opts.sprintPlan && opts.sprintPlan.length
+      ? opts.sprintPlan
+      : defaultSprintPlan(opts.sprintCount ?? 10);
+
+  const rawSum = plan.reduce((s, p) => s + Number(p.percentage || 0), 0);
+  const norm = rawSum > 0 ? rawSum : 1;
+
+  return plan.map((m, order) => {
+    const percentage = round4(Number(m.percentage || 0) / norm);
+    const amount = round2(opts.fee * percentage);
+    const hours = round2(opts.totalHours * percentage);
+    return {
+      name: m.name,
+      order,
+      percentage,
+      amount,
+      hours,
+      weeks: m.name.toLowerCase().includes('sprint') ? weeks : undefined,
+      departmentHours: opts.departmentTotals.map((d) => ({
+        department: d.department,
+        hours: round2(d.hours * percentage),
+        cost: round2(d.totalCost * percentage),
+        revenue: round2(d.totalRevenue * percentage),
+      })),
+    };
+  });
 }
 
 /**
@@ -338,6 +498,20 @@ export function calculateEstimate(input: CalculateInput): CalculateResult {
     return { month: i + 1, inflow, outflow, net: round2(inflow - outflow) };
   });
 
+  // Hours Breakdown — total hours per selected department/role
+  const departmentTotals = buildDepartmentTotals(resourceBreakdown);
+
+  const sprintCount = Math.max(1, Number(input.sprintCount) || 10);
+  const sprintWeeks = Math.max(1, Number(input.sprintWeeks) || 2);
+  const sprintBreakdown = buildSprintBreakdown({
+    fee: engagementFee,
+    totalHours,
+    departmentTotals,
+    sprintPlan: input.sprintPlan,
+    sprintCount,
+    sprintWeeks,
+  });
+
   return {
     totalHours,
     labourCost,
@@ -387,6 +561,10 @@ export function calculateEstimate(input: CalculateInput): CalculateResult {
     cashFlowProjection,
     resourceBreakdown,
     expenseBreakdown,
+    departmentTotals,
+    sprintBreakdown,
+    sprintCount,
+    sprintWeeks,
   };
 }
 

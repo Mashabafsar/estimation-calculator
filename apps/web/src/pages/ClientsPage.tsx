@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -45,7 +46,9 @@ export function ClientsPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-semibold">Clients</h1>
-        <p className="text-sm text-[var(--color-muted)]">Accounts, industries, and ownership.</p>
+        <p className="text-sm text-[var(--color-muted)]">
+          Accounts, industries, and number of estimates per client.
+        </p>
       </div>
       <div className="grid lg:grid-cols-3 gap-4">
         <form onSubmit={handleSubmit(onSubmit)} className="card p-4 space-y-3 h-fit">
@@ -78,18 +81,36 @@ export function ClientsPage() {
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Industry</th>
                 <th className="px-4 py-3">Country</th>
-                <th className="px-4 py-3">Estimates</th>
+                <th className="px-4 py-3">No. of Estimates</th>
               </tr>
             </thead>
             <tbody>
-              {clients.map((c) => (
-                <tr key={c.id} className="border-t border-[var(--color-line)]">
-                  <td className="px-4 py-3 font-medium">{c.name}</td>
-                  <td className="px-4 py-3">{c.industry ?? '—'}</td>
-                  <td className="px-4 py-3">{c.country?.name ?? '—'}</td>
-                  <td className="px-4 py-3">{c._count?.estimates ?? 0}</td>
+              {clients.map((c) => {
+                const count = c.estimatesCount ?? c._count?.estimates ?? 0;
+                return (
+                  <tr key={c.id} className="border-t border-[var(--color-line)]">
+                    <td className="px-4 py-3 font-medium">{c.name}</td>
+                    <td className="px-4 py-3">{c.industry ?? '—'}</td>
+                    <td className="px-4 py-3">{c.country?.name ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      <Link
+                        to={`/estimates?clientId=${c.id}`}
+                        className="badge bg-[var(--color-accent-soft)] text-[var(--color-accent)]"
+                        title="View estimates for this client"
+                      >
+                        {count}
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!clients.length && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-[var(--color-muted)]">
+                    No clients yet.
+                  </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

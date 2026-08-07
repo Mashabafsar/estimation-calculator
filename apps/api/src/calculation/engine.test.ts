@@ -80,4 +80,59 @@ describe('calculateEstimate (Excel/HTML parity)', () => {
     assert.equal(result.salesCommission, 18);
     assert.equal(result.cogs, 16.2);
   });
+
+  it('aggregates department hour totals and builds sprint breakdown', () => {
+    const result = calculateEstimate({
+      resources: [
+        {
+          roleName: 'QA',
+          location: 'OFFSHORE',
+          hours: 100,
+          hourlyCost: 8,
+          hourlyBilling: 38,
+        },
+        {
+          roleName: 'QA',
+          location: 'ONSHORE',
+          hours: 20,
+          hourlyCost: 35,
+          hourlyBilling: 65,
+        },
+        {
+          roleName: 'Project Management',
+          location: 'OFFSHORE',
+          hours: 40,
+          hourlyCost: 14,
+          hourlyBilling: 35,
+        },
+      ],
+      expenses: [],
+      negotiatedPrice: 50000,
+      sprintCount: 4,
+      sprintWeeks: 2,
+      settings: {
+        ...DEFAULT_CALC_SETTINGS,
+        riskPct: 0,
+        contingencyPct: 0,
+        infrastructurePct: 0,
+        overheadPct: 0,
+        supportPct: 0,
+        warrantyPct: 0,
+        maintenancePct: 0,
+      },
+      paymentTerms: [
+        { label: 'Projects > $30k', minAmount: 30000, maxAmount: null, warrantyDays: 45, terms: 'Net 14 Days' },
+      ],
+    });
+
+    assert.equal(result.totalHours, 160);
+    const qa = result.departmentTotals.find((d) => d.department === 'QA');
+    assert.ok(qa);
+    assert.equal(qa!.hours, 120);
+    assert.ok(result.sprintBreakdown.length > 4);
+    const advance = result.sprintBreakdown[0];
+    assert.equal(advance.percentage, 0.2);
+    assert.equal(advance.amount, 10000);
+    assert.equal(advance.hours, 32);
+  });
 });

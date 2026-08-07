@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { api, money, pct } from '../lib/api';
@@ -19,6 +19,8 @@ interface Template {
   cogsRate: string;
   defaultSubcontractor: string;
   defaultDevServerCost: string;
+  defaultSprintCount?: number;
+  defaultSprintWeeks?: number;
   roles: Array<{
     location: 'ONSHORE' | 'OFFSHORE';
     defaultHours: string;
@@ -45,10 +47,31 @@ interface CalcResult {
   cogs: number;
   labourCost: number;
   labourRevenue: number;
+  totalHours: number;
   marketRate: number;
   apiRate: number;
   paymentTerms: string | null;
   recommendations: Array<{ message: string; amount?: number }>;
+  departmentTotals: Array<{
+    department: string;
+    hours: number;
+    hourlyCost: number;
+    hourlyBilling: number;
+    totalCost: number;
+    totalRevenue: number;
+    pctOfHours: number;
+  }>;
+  sprintBreakdown: Array<{
+    name: string;
+    order: number;
+    percentage: number;
+    amount: number;
+    hours: number;
+    weeks?: number;
+    departmentHours: Array<{ department: string; hours: number; cost: number; revenue: number }>;
+  }>;
+  sprintCount: number;
+  sprintWeeks: number;
 }
 
 type FormValues = {
@@ -60,6 +83,8 @@ type FormValues = {
   negotiatedPrice: number | '';
   startDate: string;
   expectedDelivery: string;
+  sprintCount: number;
+  sprintWeeks: number;
   resources: Array<{
     roleId: string;
     roleName: string;
@@ -84,6 +109,7 @@ export function EstimateFormPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [calc, setCalc] = useState<CalcResult | null>(null);
   const [saving, setSaving] = useState(false);
+  const [expandedSprint, setExpandedSprint] = useState<number | null>(null);
 
   const { register, control, watch, setValue, handleSubmit, getValues } = useForm<FormValues>({
     defaultValues: {
@@ -95,6 +121,8 @@ export function EstimateFormPage() {
       negotiatedPrice: '',
       startDate: '',
       expectedDelivery: '',
+      sprintCount: 10,
+      sprintWeeks: 2,
       resources: [],
       expenses: [],
     },
@@ -144,6 +172,8 @@ export function EstimateFormPage() {
         isRecurring: true,
       },
     ]);
+    setValue('sprintCount', tpl.defaultSprintCount ?? 10);
+    setValue('sprintWeeks', tpl.defaultSprintWeeks ?? 2);
   }, [templateId, templates]);
 
   async function preview() {
@@ -195,7 +225,7 @@ export function EstimateFormPage() {
         <div>
           <h1 className="text-2xl font-semibold">New Estimate</h1>
           <p className="text-sm text-[var(--color-muted)]">
-            Resource planning feeds the backend financial engine — UI displays results only.
+            Department hour totals and sprint breakdown are calculated on the backend.
           </p>
         </div>
         <div className="flex gap-2">
@@ -264,6 +294,26 @@ export function EstimateFormPage() {
               <span className="font-medium">Expected Delivery</span>
               <input className="input" type="date" {...register('expectedDelivery')} />
             </label>
+            <label className="text-sm space-y-1">
+              <span className="font-medium">Sprint Count</span>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={30}
+                {...register('sprintCount', { valueAsNumber: true })}
+              />
+            </label>
+            <label className="text-sm space-y-1">
+              <span className="font-medium">Sprint Weeks</span>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                max={8}
+                {...register('sprintWeeks', { valueAsNumber: true })}
+              />
+            </label>
             <label className="text-sm space-y-1 sm:col-span-2">
               <span className="font-medium">Description</span>
               <textarea className="input min-h-20" {...register('description')} />
@@ -272,7 +322,7 @@ export function EstimateFormPage() {
 
           <div className="card p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="font-semibold">Resource Planning</h2>
+              <h2 className="font-semibold">Resource Planning (Departments)</h2>
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -296,7 +346,7 @@ export function EstimateFormPage() {
               {resources.fields.map((field, index) => (
                 <div key={field.id} className="grid grid-cols-12 gap-2 items-end">
                   <label className="col-span-4 text-xs space-y-1">
-                    <span>Role</span>
+                    <span>Department / Role</span>
                     <select
                       className="input"
                       {...register(`resources.${index}.roleId`)}
@@ -328,17 +378,36 @@ export function EstimateFormPage() {
                   </label>
                   <label className="col-span-2 text-xs space-y-1">
                     <span>Hours</span>
-                    <input className="input" type="number" step="0.5" {...register(`resources.${index}.hours`, { valueAsNumber: true })} />
+                    <input
+                      className="input"
+                      type="number"
+                      step="0.5"
+                      {...register(`resources.${index}.hours`, { valueAsNumber: true })}
+                    />
                   </label>
                   <label className="col-span-1 text-xs space-y-1">
                     <span>Cost</span>
-                    <input className="input" type="number" step="0.01" {...register(`resources.${index}.hourlyCost`, { valueAsNumber: true })} />
+                    <input
+                      className="input"
+                      type="number"
+                      step="0.01"
+                      {...register(`resources.${index}.hourlyCost`, { valueAsNumber: true })}
+                    />
                   </label>
                   <label className="col-span-2 text-xs space-y-1">
                     <span>Billing</span>
-                    <input className="input" type="number" step="0.01" {...register(`resources.${index}.hourlyBilling`, { valueAsNumber: true })} />
+                    <input
+                      className="input"
+                      type="number"
+                      step="0.01"
+                      {...register(`resources.${index}.hourlyBilling`, { valueAsNumber: true })}
+                    />
                   </label>
-                  <button type="button" className="btn btn-ghost col-span-1" onClick={() => resources.remove(index)}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost col-span-1"
+                    onClick={() => resources.remove(index)}
+                  >
                     ×
                   </button>
                 </div>
@@ -353,7 +422,12 @@ export function EstimateFormPage() {
                 type="button"
                 className="btn btn-ghost"
                 onClick={() =>
-                  expenses.append({ category: 'OTHER', name: 'Miscellaneous', amount: 0, isRecurring: false })
+                  expenses.append({
+                    category: 'OTHER',
+                    name: 'Miscellaneous',
+                    amount: 0,
+                    isRecurring: false,
+                  })
                 }
               >
                 Add Expense
@@ -394,18 +468,126 @@ export function EstimateFormPage() {
                 </label>
                 <label className="col-span-3 text-xs space-y-1">
                   <span>Amount</span>
-                  <input className="input" type="number" step="0.01" {...register(`expenses.${index}.amount`, { valueAsNumber: true })} />
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    {...register(`expenses.${index}.amount`, { valueAsNumber: true })}
+                  />
                 </label>
                 <label className="col-span-1 text-xs space-y-1 flex items-center gap-1 pb-2">
                   <input type="checkbox" {...register(`expenses.${index}.isRecurring`)} />
                   Recurring
                 </label>
-                <button type="button" className="btn btn-ghost col-span-1" onClick={() => expenses.remove(index)}>
+                <button
+                  type="button"
+                  className="btn btn-ghost col-span-1"
+                  onClick={() => expenses.remove(index)}
+                >
                   ×
                 </button>
               </div>
             ))}
           </div>
+
+          {calc?.departmentTotals?.length ? (
+            <div className="card overflow-hidden">
+              <div className="px-4 py-3 border-b border-[var(--color-line)] font-semibold">
+                Department Hours Totals
+              </div>
+              <table className="w-full text-sm">
+                <thead className="text-left text-[var(--color-muted)] bg-[var(--color-canvas)]">
+                  <tr>
+                    <th className="px-4 py-2">Department</th>
+                    <th className="px-4 py-2">Hours</th>
+                    <th className="px-4 py-2">% Hours</th>
+                    <th className="px-4 py-2">Avg Cost</th>
+                    <th className="px-4 py-2">Avg Bill</th>
+                    <th className="px-4 py-2">Total Cost</th>
+                    <th className="px-4 py-2">Total Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calc.departmentTotals.map((d) => (
+                    <tr key={d.department} className="border-t border-[var(--color-line)]">
+                      <td className="px-4 py-2 font-medium">{d.department}</td>
+                      <td className="px-4 py-2">{d.hours}</td>
+                      <td className="px-4 py-2">{pct(d.pctOfHours)}</td>
+                      <td className="px-4 py-2">${d.hourlyCost.toFixed(2)}</td>
+                      <td className="px-4 py-2">${d.hourlyBilling.toFixed(2)}</td>
+                      <td className="px-4 py-2">{money(d.totalCost)}</td>
+                      <td className="px-4 py-2">{money(d.totalRevenue)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-[var(--color-line)] bg-[var(--color-canvas)] font-semibold">
+                    <td className="px-4 py-2">Total</td>
+                    <td className="px-4 py-2">{calc.totalHours}</td>
+                    <td className="px-4 py-2">100%</td>
+                    <td className="px-4 py-2" colSpan={2} />
+                    <td className="px-4 py-2">{money(calc.labourCost)}</td>
+                    <td className="px-4 py-2">{money(calc.labourRevenue)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          {calc?.sprintBreakdown?.length ? (
+            <div className="card overflow-hidden">
+              <div className="px-4 py-3 border-b border-[var(--color-line)] font-semibold">
+                Sprint / Milestone Breakdown ({calc.sprintCount} sprints × {calc.sprintWeeks} weeks)
+              </div>
+              <table className="w-full text-sm">
+                <thead className="text-left text-[var(--color-muted)] bg-[var(--color-canvas)]">
+                  <tr>
+                    <th className="px-4 py-2">Milestone</th>
+                    <th className="px-4 py-2">%</th>
+                    <th className="px-4 py-2">Amount</th>
+                    <th className="px-4 py-2">Hours</th>
+                    <th className="px-4 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {calc.sprintBreakdown.map((s) => (
+                    <Fragment key={s.order}>
+                      <tr className="border-t border-[var(--color-line)]">
+                        <td className="px-4 py-2">{s.name}</td>
+                        <td className="px-4 py-2">{pct(s.percentage * 100)}</td>
+                        <td className="px-4 py-2">{money(s.amount)}</td>
+                        <td className="px-4 py-2">{s.hours}</td>
+                        <td className="px-4 py-2">
+                          <button
+                            type="button"
+                            className="text-xs text-[var(--color-accent)]"
+                            onClick={() =>
+                              setExpandedSprint(expandedSprint === s.order ? null : s.order)
+                            }
+                          >
+                            {expandedSprint === s.order ? 'Hide depts' : 'Depts'}
+                          </button>
+                        </td>
+                      </tr>
+                      {expandedSprint === s.order &&
+                        s.departmentHours
+                          .filter((d) => d.hours > 0)
+                          .map((d) => (
+                            <tr
+                              key={`${s.order}-${d.department}`}
+                              className="bg-[var(--color-canvas)] text-xs text-[var(--color-muted)]"
+                            >
+                              <td className="px-8 py-1">{d.department}</td>
+                              <td className="px-4 py-1" />
+                              <td className="px-4 py-1">{money(d.revenue)}</td>
+                              <td className="px-4 py-1">{d.hours}h</td>
+                              <td />
+                            </tr>
+                          ))}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </div>
 
         <div className="space-y-4">
@@ -429,11 +611,23 @@ export function EstimateFormPage() {
                   </div>
                   <div>
                     <div className="text-[var(--color-muted)] text-xs">Direct Margin</div>
-                    <div className={`font-semibold text-lg ${healthColor}`}>{money(calc.directMargin)}</div>
+                    <div className={`font-semibold text-lg ${healthColor}`}>
+                      {money(calc.directMargin)}
+                    </div>
                   </div>
                   <div>
                     <div className="text-[var(--color-muted)] text-xs">Margin %</div>
-                    <div className={`font-semibold text-lg ${healthColor}`}>{pct(calc.grossMarginPct)}</div>
+                    <div className={`font-semibold text-lg ${healthColor}`}>
+                      {pct(calc.grossMarginPct)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[var(--color-muted)] text-xs">Total Hours</div>
+                    <div className="font-semibold">{calc.totalHours}</div>
+                  </div>
+                  <div>
+                    <div className="text-[var(--color-muted)] text-xs">Departments</div>
+                    <div className="font-semibold">{calc.departmentTotals?.length ?? 0}</div>
                   </div>
                   <div>
                     <div className="text-[var(--color-muted)] text-xs">Recommended Price</div>
@@ -445,9 +639,15 @@ export function EstimateFormPage() {
                   </div>
                 </div>
                 <div className="text-xs text-[var(--color-muted)] space-y-1 border-t border-[var(--color-line)] pt-3">
-                  <div>Labour Rev {money(calc.labourRevenue)} · Cost {money(calc.labourCost)}</div>
-                  <div>Commission {money(calc.salesCommission)} · COGS {money(calc.cogs)}</div>
-                  <div>API Rate ${calc.apiRate.toFixed(0)}/hr · Market ${calc.marketRate.toFixed(0)}/hr</div>
+                  <div>
+                    Labour Rev {money(calc.labourRevenue)} · Cost {money(calc.labourCost)}
+                  </div>
+                  <div>
+                    Commission {money(calc.salesCommission)} · COGS {money(calc.cogs)}
+                  </div>
+                  <div>
+                    API Rate ${calc.apiRate.toFixed(0)}/hr · Market ${calc.marketRate.toFixed(0)}/hr
+                  </div>
                   <div>Payment Terms: {calc.paymentTerms ?? '—'}</div>
                 </div>
                 <div className="space-y-2">

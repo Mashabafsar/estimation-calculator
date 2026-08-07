@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   createColumnHelper,
   flexRender,
@@ -38,11 +38,14 @@ function healthBadge(health?: string) {
 
 export function EstimatesPage() {
   const { token } = useAuth();
+  const [searchParams] = useSearchParams();
+  const clientId = searchParams.get('clientId') || undefined;
   const [rows, setRows] = useState<EstimateRow[]>([]);
 
   useEffect(() => {
-    api<EstimateRow[]>('/estimates', { token }).then(setRows).catch(console.error);
-  }, [token]);
+    const qs = clientId ? `?clientId=${encodeURIComponent(clientId)}` : '';
+    api<EstimateRow[]>(`/estimates${qs}`, { token }).then(setRows).catch(console.error);
+  }, [token, clientId]);
 
   const columns = useMemo(
     () => [
@@ -86,7 +89,11 @@ export function EstimatesPage() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Estimates</h1>
-          <p className="text-sm text-[var(--color-muted)]">Create, review, and approve project estimates.</p>
+          <p className="text-sm text-[var(--color-muted)]">
+            {clientId
+              ? 'Filtered by client — create, review, and approve project estimates.'
+              : 'Create, review, and approve project estimates.'}
+          </p>
         </div>
         <Link to="/estimates/new" className="btn btn-primary">
           <Plus size={16} /> New Estimate

@@ -189,6 +189,10 @@ model ServiceTemplate {
   defaultQaPct            Decimal? @db.Decimal(8, 4)
   defaultPmPct            Decimal? @db.Decimal(8, 4)
   defaultInfrastructurePct Decimal? @db.Decimal(8, 4)
+  defaultSprintCount      Int      @default(10)
+  defaultSprintWeeks      Int      @default(2)
+  /// [{ name, percentage }] — payment/effort milestones (0–1). Null = engine default plan.
+  sprintPaymentPlan       Json?
   isActive                Boolean  @default(true)
   sortOrder               Int      @default(0)
   createdAt               DateTime @default(now())
@@ -254,6 +258,10 @@ model Estimate {
   negotiatedPrice  Decimal?       @db.Decimal(14, 2)
   recommendedPrice Decimal?       @db.Decimal(14, 2)
   discountPct      Decimal?       @db.Decimal(8, 4)
+  sprintCount      Int?
+  sprintWeeks      Int?
+  /// Override template sprint plan for this estimate [{ name, percentage }]
+  sprintPaymentPlan Json?
   currentVersion   Int            @default(1)
   createdById      String
   wonAt            DateTime?
@@ -367,6 +375,8 @@ model EstimateCalculation {
   recommendations         Json?
   cashFlowProjection      Json?
   rawBreakdown            Json?
+  departmentTotals        Json?
+  sprintBreakdown         Json?
   calculatedAt            DateTime    @default(now())
   updatedAt               DateTime    @updatedAt
 

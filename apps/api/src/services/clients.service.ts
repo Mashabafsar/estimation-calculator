@@ -2,7 +2,7 @@ import { prisma } from '../utils/prisma.js';
 import { AppError } from '../utils/errors.js';
 
 export async function listClients() {
-  return prisma.client.findMany({
+  const clients = await prisma.client.findMany({
     where: { isActive: true },
     include: {
       country: true,
@@ -13,6 +13,11 @@ export async function listClients() {
     },
     orderBy: { name: 'asc' },
   });
+
+  return clients.map((c) => ({
+    ...c,
+    estimatesCount: c._count.estimates,
+  }));
 }
 
 export async function getClient(id: string) {

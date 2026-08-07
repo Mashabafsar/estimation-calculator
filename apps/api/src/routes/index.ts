@@ -47,8 +47,46 @@ const estimateSchema = z.object({
   expectedDelivery: z.string().optional(),
   currencyId: z.string().optional(),
   negotiatedPrice: z.number().nullable().optional(),
+  sprintCount: z.number().int().min(1).max(30).nullable().optional(),
+  sprintWeeks: z.number().int().min(1).max(8).nullable().optional(),
+  sprintPaymentPlan: z
+    .array(z.object({ name: z.string(), percentage: z.number().min(0).max(1) }))
+    .nullable()
+    .optional(),
   resources: z.array(resourceSchema).default([]),
   expenses: z.array(expenseSchema).default([]),
+});
+
+const templateRoleSchema = z.object({
+  roleId: z.string().min(1),
+  location: z.nativeEnum(ResourceLocation),
+  defaultHours: z.number().min(0),
+  billRateOverride: z.number().nullable().optional(),
+  costRateOverride: z.number().nullable().optional(),
+});
+
+const templateSchema = z.object({
+  name: z.string().min(1),
+  slug: z.string().optional(),
+  description: z.string().optional(),
+  commissionRate: z.number().min(0).max(1),
+  cogsRate: z.number().min(0).max(1),
+  defaultSubcontractor: z.number().min(0).optional(),
+  defaultDevServerCost: z.number().min(0).optional(),
+  defaultMargin: z.number().min(0).max(1).nullable().optional(),
+  defaultRiskPct: z.number().min(0).max(1).nullable().optional(),
+  defaultContingencyPct: z.number().min(0).max(1).nullable().optional(),
+  defaultQaPct: z.number().min(0).max(1).nullable().optional(),
+  defaultPmPct: z.number().min(0).max(1).nullable().optional(),
+  defaultInfrastructurePct: z.number().min(0).max(1).nullable().optional(),
+  defaultSprintCount: z.number().int().min(1).max(30).optional(),
+  defaultSprintWeeks: z.number().int().min(1).max(8).optional(),
+  sprintPaymentPlan: z
+    .array(z.object({ name: z.string(), percentage: z.number().min(0).max(1) }))
+    .nullable()
+    .optional(),
+  isActive: z.boolean().optional(),
+  roles: z.array(templateRoleSchema).optional(),
 });
 
 // Auth
@@ -198,8 +236,9 @@ router.patch(
 router.get(
   '/templates',
   authenticate,
-  asyncHandler(async (_req, res) => {
-    res.json({ success: true, data: await templatesService.listTemplates() });
+  asyncHandler(async (req, res) => {
+    const includeInactive = req.query.all === 'true';
+    res.json({ success: true, data: await templatesService.listTemplates(includeInactive) });
   }),
 );
 
@@ -211,13 +250,75 @@ router.get(
   }),
 );
 
+router.post(
+  '/templates',
+  authenticate,
+  authorize(UserRole.ADMIN, UserRole.SOLUTION_ARCHITECT),
+  requireWrite,
+  asyncHandler(async (req, res) => {
+    const body = templateSchema.parse(req.body);
+    res.status(201).json({ success: true, data: await templatesService.createTemplate(body) });
+  }),
+);
+
+router.put(
+  '/templates/:id',
+  authenticate,
+  authorize(UserRole.ADMIN, UserRole.SOLUTION_ARCHITECT),
+  requireWrite,
+  asyncHandler(async (req, res) => {
+    const body = templateSchema.parse(req.body);
+    res.json({ success: true, data: await templatesService.updateTemplate(req.params.id, body) });
+  }),
+);
+
 router.patch(
   '/templates/:id',
   authenticate,
   authorize(UserRole.ADMIN, UserRole.SOLUTION_ARCHITECT),
   requireWrite,
   asyncHandler(async (req, res) => {
-    res.json({ success: true, data: await templatesService.updateTemplate(req.params.id, req.body) });
+    const existing = await templatesService.getTemplate(req.params.id);
+    const body = templateSchema.parse({
+      name: existing.name,
+      slug: existing.slug,
+      description: existing.description ?? undefined,
+      commissionRate: Number(existing.commissionRate),
+      cogsRate: Number(existing.cogsRate),
+      defaultSubcontractor: Number(existing.defaultSubcontractor),
+      defaultDevServerCost: Number(existing.defaultDevServerCost),
+      defaultMargin: existing.defaultMargin != null ? Number(existing.defaultMargin) : null,
+      defaultRiskPct: existing.defaultRiskPct != null ? Number(existing.defaultRiskPct) : null,
+      defaultContingencyPct:
+        existing.defaultContingencyPct != null ? Number(existing.defaultContingencyPct) : null,
+      defaultQaPct: existing.defaultQaPct != null ? Number(existing.defaultQaPct) : null,
+      defaultPmPct: existing.defaultPmPct != null ? Number(existing.defaultPmPct) : null,
+      defaultInfrastructurePct:
+        existing.defaultInfrastructurePct != null ? Number(existing.defaultInfrastructurePct) : null,
+      defaultSprintCount: existing.defaultSprintCount,
+      defaultSprintWeeks: existing.defaultSprintWeeks,
+      sprintPaymentPlan: existing.sprintPaymentPlan,
+      isActive: existing.isActive,
+      roles: existing.roles.map((r) => ({
+        roleId: r.roleId,
+        location: r.location,
+        defaultHours: Number(r.defaultHours),
+        billRateOverride: r.billRateOverride != null ? Number(r.billRateOverride) : null,
+        costRateOverride: r.costRateOverride != null ? Number(r.costRateOverride) : null,
+      })),
+      ...req.body,
+    });
+    res.json({ success: true, data: await templatesService.updateTemplate(req.params.id, body) });
+  }),
+);
+
+router.delete(
+  '/templates/:id',
+  authenticate,
+  authorize(UserRole.ADMIN, UserRole.SOLUTION_ARCHITECT),
+  requireWrite,
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: await templatesService.deleteTemplate(req.params.id) });
   }),
 );
 

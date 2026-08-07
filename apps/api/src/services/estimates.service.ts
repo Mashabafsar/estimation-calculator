@@ -39,6 +39,9 @@ export interface EstimatePayload {
   expectedDelivery?: string;
   currencyId?: string;
   negotiatedPrice?: number | null;
+  sprintCount?: number | null;
+  sprintWeeks?: number | null;
+  sprintPaymentPlan?: Array<{ name: string; percentage: number }> | null;
   resources: ResourceInput[];
   expenses: ExpenseInput[];
 }
@@ -65,14 +68,26 @@ async function runCalculation(payload: {
   templateId?: string | null;
   startDate?: Date | null;
   expectedDelivery?: Date | null;
+  sprintCount?: number | null;
+  sprintWeeks?: number | null;
+  sprintPaymentPlan?: Array<{ name: string; percentage: number }> | null;
 }) {
   let commissionRate: number | undefined;
   let cogsRate: number | undefined;
+  let sprintCount = payload.sprintCount ?? null;
+  let sprintWeeks = payload.sprintWeeks ?? null;
+  let sprintPlan = payload.sprintPaymentPlan ?? null;
+
   if (payload.templateId) {
     const tpl = await prisma.serviceTemplate.findUnique({ where: { id: payload.templateId } });
     if (tpl) {
       commissionRate = Number(tpl.commissionRate);
       cogsRate = Number(tpl.cogsRate);
+      if (sprintCount == null) sprintCount = tpl.defaultSprintCount;
+      if (sprintWeeks == null) sprintWeeks = tpl.defaultSprintWeeks;
+      if (!sprintPlan && tpl.sprintPaymentPlan) {
+        sprintPlan = tpl.sprintPaymentPlan as Array<{ name: string; percentage: number }>;
+      }
     }
   }
 
@@ -107,6 +122,9 @@ async function runCalculation(payload: {
     settings,
     paymentTerms,
     projectDurationDays,
+    sprintCount,
+    sprintWeeks,
+    sprintPlan,
   });
 }
 
@@ -162,6 +180,8 @@ function calcCreateData(estimateId: string, calc: Awaited<ReturnType<typeof runC
       resources: calc.resourceBreakdown,
       expenses: calc.expenseBreakdown,
     } as any,
+    departmentTotals: calc.departmentTotals as any,
+    sprintBreakdown: calc.sprintBreakdown as any,
   };
 }
 
@@ -218,6 +238,9 @@ export async function previewCalculation(payload: EstimatePayload) {
     templateId: payload.templateId,
     startDate: payload.startDate ? new Date(payload.startDate) : null,
     expectedDelivery: payload.expectedDelivery ? new Date(payload.expectedDelivery) : null,
+    sprintCount: payload.sprintCount,
+    sprintWeeks: payload.sprintWeeks,
+    sprintPaymentPlan: payload.sprintPaymentPlan,
   });
 }
 
@@ -232,6 +255,9 @@ export async function createEstimate(userId: string, payload: EstimatePayload) {
     templateId: payload.templateId,
     startDate,
     expectedDelivery,
+    sprintCount: payload.sprintCount,
+    sprintWeeks: payload.sprintWeeks,
+    sprintPaymentPlan: payload.sprintPaymentPlan,
   });
 
   const estimateNumber = await nextEstimateNumber();
@@ -250,6 +276,9 @@ export async function createEstimate(userId: string, payload: EstimatePayload) {
       negotiatedPrice: payload.negotiatedPrice != null ? decimal(payload.negotiatedPrice) : null,
       recommendedPrice: decimal(calc.recommendedPrice),
       discountPct: decimal(calc.discountPct),
+      sprintCount: payload.sprintCount ?? calc.sprintCount,
+      sprintWeeks: payload.sprintWeeks ?? calc.sprintWeeks,
+      sprintPaymentPlan: (payload.sprintPaymentPlan as any) ?? undefined,
       createdById: userId,
       resources: {
         create: payload.resources.map((r, i) => ({
@@ -304,6 +333,9 @@ export async function updateEstimate(id: string, userId: string, payload: Estima
     templateId: payload.templateId,
     startDate,
     expectedDelivery,
+    sprintCount: payload.sprintCount,
+    sprintWeeks: payload.sprintWeeks,
+    sprintPaymentPlan: payload.sprintPaymentPlan,
   });
 
   const nextVersion = existing.currentVersion + 1;
@@ -329,6 +361,9 @@ export async function updateEstimate(id: string, userId: string, payload: Estima
         negotiatedPrice: payload.negotiatedPrice != null ? decimal(payload.negotiatedPrice) : null,
         recommendedPrice: decimal(calc.recommendedPrice),
         discountPct: decimal(calc.discountPct),
+        sprintCount: payload.sprintCount ?? calc.sprintCount,
+        sprintWeeks: payload.sprintWeeks ?? calc.sprintWeeks,
+        sprintPaymentPlan: (payload.sprintPaymentPlan as any) ?? undefined,
         currentVersion: nextVersion,
         resources: {
           create: payload.resources.map((r, i) => ({

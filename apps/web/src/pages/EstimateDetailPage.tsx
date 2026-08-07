@@ -169,12 +169,75 @@ export function EstimateDetailPage() {
         </div>
       </div>
 
+      {Array.isArray(calc?.departmentTotals) && calc.departmentTotals.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--color-line)] font-semibold">
+            Department Hours Totals
+          </div>
+          <table className="w-full text-sm">
+            <thead className="text-left text-[var(--color-muted)] bg-[var(--color-canvas)]">
+              <tr>
+                <th className="px-4 py-2">Department</th>
+                <th className="px-4 py-2">Hours</th>
+                <th className="px-4 py-2">% Hours</th>
+                <th className="px-4 py-2">Total Cost</th>
+                <th className="px-4 py-2">Total Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              {calc.departmentTotals.map((d: any) => (
+                <tr key={d.department} className="border-t border-[var(--color-line)]">
+                  <td className="px-4 py-2 font-medium">{d.department}</td>
+                  <td className="px-4 py-2">{d.hours}</td>
+                  <td className="px-4 py-2">{pct(d.pctOfHours)}</td>
+                  <td className="px-4 py-2">{money(d.totalCost)}</td>
+                  <td className="px-4 py-2">{money(d.totalRevenue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {Array.isArray(calc?.sprintBreakdown) && calc.sprintBreakdown.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--color-line)] font-semibold">
+            Sprint / Milestone Breakdown
+            {estimate.sprintCount ? ` · ${estimate.sprintCount} sprints` : ''}
+            {estimate.sprintWeeks ? ` × ${estimate.sprintWeeks} weeks` : ''}
+          </div>
+          <table className="w-full text-sm">
+            <thead className="text-left text-[var(--color-muted)] bg-[var(--color-canvas)]">
+              <tr>
+                <th className="px-4 py-2">Milestone</th>
+                <th className="px-4 py-2">%</th>
+                <th className="px-4 py-2">Amount</th>
+                <th className="px-4 py-2">Hours</th>
+              </tr>
+            </thead>
+            <tbody>
+              {calc.sprintBreakdown.map((s: any) => (
+                <tr key={s.order} className="border-t border-[var(--color-line)]">
+                  <td className="px-4 py-2">{s.name}</td>
+                  <td className="px-4 py-2">{pct(Number(s.percentage) * 100)}</td>
+                  <td className="px-4 py-2">{money(s.amount)}</td>
+                  <td className="px-4 py-2">{s.hours}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="grid lg:grid-cols-2 gap-4">
         <div className="card p-4">
           <div className="font-semibold mb-3">Scenarios</div>
           <div className="space-y-2">
             {estimate.scenarios?.map((s: any) => (
-              <div key={s.id} className="flex items-center justify-between rounded-lg border border-[var(--color-line)] px-3 py-2 text-sm">
+              <div
+                key={s.id}
+                className="flex items-center justify-between rounded-lg border border-[var(--color-line)] px-3 py-2 text-sm"
+              >
                 <div>
                   <div className="font-medium">
                     {s.name} {s.isWinner ? '★' : ''}
@@ -195,7 +258,8 @@ export function EstimateDetailPage() {
               <div key={v.id} className="rounded-lg border border-[var(--color-line)] px-3 py-2 text-sm">
                 <div className="font-medium">Version {v.version}</div>
                 <div className="text-xs text-[var(--color-muted)]">
-                  {v.createdBy?.firstName} {v.createdBy?.lastName} · {new Date(v.createdAt).toLocaleString()}
+                  {v.createdBy?.firstName} {v.createdBy?.lastName} ·{' '}
+                  {new Date(v.createdAt).toLocaleString()}
                 </div>
                 <div className="text-xs mt-1">{v.changeSummary}</div>
               </div>
