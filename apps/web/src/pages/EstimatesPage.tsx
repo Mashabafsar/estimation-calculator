@@ -10,6 +10,7 @@ import { Plus } from 'lucide-react';
 import { api, money, pct } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { MarginHealthBadge } from '../components/MarginHealth';
+import { PageLoader } from '../components/Loader';
 
 interface EstimateRow {
   id: string;
@@ -33,10 +34,15 @@ export function EstimatesPage() {
   const [searchParams] = useSearchParams();
   const clientId = searchParams.get('clientId') || undefined;
   const [rows, setRows] = useState<EstimateRow[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     const qs = clientId ? `?clientId=${encodeURIComponent(clientId)}` : '';
-    api<EstimateRow[]>(`/estimates${qs}`, { token }).then(setRows).catch(console.error);
+    api<EstimateRow[]>(`/estimates${qs}`, { token })
+      .then(setRows)
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [token, clientId]);
 
   const columns = useMemo(
@@ -92,39 +98,43 @@ export function EstimatesPage() {
           <Plus size={16} /> New Estimate
         </Link>
       </div>
-      <div className="card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-[var(--color-canvas)] text-left text-[var(--color-muted)]">
-            {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id}>
-                {hg.headers.map((h) => (
-                  <th key={h.id} className="px-4 py-3 font-medium">
-                    {flexRender(h.column.columnDef.header, h.getContext())}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="border-t border-[var(--color-line)]">
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-3">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+      {loading ? (
+        <PageLoader label="Loading estimates…" />
+      ) : (
+        <div className="card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-[var(--color-canvas)] text-left text-[var(--color-muted)]">
+              {table.getHeaderGroups().map((hg) => (
+                <tr key={hg.id}>
+                  {hg.headers.map((h) => (
+                    <th key={h.id} className="px-4 py-3 font-medium">
+                      {flexRender(h.column.columnDef.header, h.getContext())}
+                    </th>
+                  ))}
+                </tr>
+              ))}
+            </thead>
+            <tbody>
+              {table.getRowModel().rows.map((row) => (
+                <tr key={row.id} className="border-t border-[var(--color-line)]">
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className="px-4 py-3">
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {!rows.length && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-[var(--color-muted)]">
+                    No estimates yet.
                   </td>
-                ))}
-              </tr>
-            ))}
-            {!rows.length && (
-              <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-[var(--color-muted)]">
-                  No estimates yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

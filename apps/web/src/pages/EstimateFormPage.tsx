@@ -14,6 +14,7 @@ import {
 import { api, money, pct } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { MarginHealthBox } from '../components/MarginHealth';
+import { ButtonLoader } from '../components/Loader';
 
 interface Role {
   id: string;
@@ -121,6 +122,7 @@ export function EstimateFormPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [calc, setCalc] = useState<CalcResult | null>(null);
   const [saving, setSaving] = useState(false);
+  const [calculating, setCalculating] = useState(false);
   const [expandedSprint, setExpandedSprint] = useState<number | null>(null);
   const [uploadMsg, setUploadMsg] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -258,19 +260,24 @@ export function EstimateFormPage() {
   }
 
   async function preview() {
-    const values = getValues();
-    const payload = {
-      ...values,
-      negotiatedPrice: values.negotiatedPrice === '' ? null : Number(values.negotiatedPrice),
-      clientId: values.clientId || undefined,
-      templateId: values.templateId || undefined,
-    };
-    const result = await api<CalcResult>('/estimates/preview', {
-      method: 'POST',
-      token,
-      body: JSON.stringify(payload),
-    });
-    setCalc(result);
+    setCalculating(true);
+    try {
+      const values = getValues();
+      const payload = {
+        ...values,
+        negotiatedPrice: values.negotiatedPrice === '' ? null : Number(values.negotiatedPrice),
+        clientId: values.clientId || undefined,
+        templateId: values.templateId || undefined,
+      };
+      const result = await api<CalcResult>('/estimates/preview', {
+        method: 'POST',
+        token,
+        body: JSON.stringify(payload),
+      });
+      setCalc(result);
+    } finally {
+      setCalculating(false);
+    }
   }
 
   async function onSubmit(values: FormValues) {
@@ -310,11 +317,16 @@ export function EstimateFormPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button type="button" className="btn btn-ghost" onClick={preview}>
-            Calculate
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={preview}
+            disabled={calculating || saving || uploading}
+          >
+            {calculating ? <ButtonLoader label="Calculating…" /> : 'Calculate'}
           </button>
-          <button className="btn btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save Estimate'}
+          <button className="btn btn-primary" disabled={saving || calculating || uploading}>
+            {saving ? <ButtonLoader label="Saving…" /> : 'Save Estimate'}
           </button>
         </div>
       </div>
@@ -329,8 +341,8 @@ export function EstimateFormPage() {
                   Upload Boxer-style Hours Breakdown (.xlsx). Departments & hours are loaded and remain editable.
                 </p>
               </div>
-              <label className="btn btn-ghost cursor-pointer">
-                {uploading ? 'Parsing…' : 'Upload .xlsx'}
+              <label className={`btn btn-ghost cursor-pointer ${uploading ? 'opacity-65 pointer-events-none' : ''}`}>
+                {uploading ? <ButtonLoader label="Parsing…" /> : 'Upload .xlsx'}
                 <input
                   type="file"
                   accept=".xlsx,.xls"
@@ -740,12 +752,17 @@ export function EstimateFormPage() {
         <div className="space-y-4">
           <div className="card p-4 space-y-3 sticky top-4">
             <h2 className="font-semibold">Financial Results</h2>
-            {!calc && (
+            {calculating && (
+              <div className="flex items-center gap-2 text-sm text-[var(--color-muted)]">
+                <ButtonLoader label="Calculating…" />
+              </div>
+            )}
+            {!calc && !calculating && (
               <p className="text-sm text-[var(--color-muted)]">
                 Click Calculate to run the backend engine against current inputs.
               </p>
             )}
-            {calc && (
+            {calc && !calculating && (
               <>
                 <MarginHealthBox
                   health={calc.marginHealth}

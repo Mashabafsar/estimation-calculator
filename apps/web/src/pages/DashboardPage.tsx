@@ -17,6 +17,7 @@ import {
 import { api, money, pct } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { MarginHealthLegend } from '../components/MarginHealth';
+import { PageLoader } from '../components/Loader';
 
 interface DashboardData {
   kpis: {
@@ -25,11 +26,8 @@ interface DashboardData {
     lostDeals: number;
     averageMargin: number;
     averageSellingPrice: number;
-    averageDevelopmentCost: number;
-    averageProjectDuration: number;
     revenuePipeline: number;
     monthlyEstimatedRevenue: number;
-    resourceUtilization: number;
     marginDistribution: { green: number; yellow: number; red: number };
   };
   charts: {
@@ -54,16 +52,27 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: stri
   );
 }
 
+function shareOfTotal(count: number, total: number) {
+  if (!total) return '0% of total';
+  return `${pct((count / total) * 100, 0)} of total`;
+}
+
 export function DashboardPage() {
   const { token } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api<DashboardData>('/dashboard', { token }).then(setData).catch(console.error);
+    setLoading(true);
+    api<DashboardData>('/dashboard', { token })
+      .then(setData)
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [token]);
 
-  if (!data) return <div className="text-[var(--color-muted)]">Loading dashboard…</div>;
+  if (loading || !data) return <PageLoader label="Loading dashboard…" />;
 
+  const total = data.kpis.totalEstimates;
   const costData = Object.entries(data.charts.costBreakdown).map(([name, value]) => ({ name, value }));
   const marginPie = [
     { name: 'Green ≥50%', value: data.kpis.marginDistribution.green, color: '#047857' },
@@ -87,18 +96,25 @@ export function DashboardPage() {
         <p className="text-sm text-[var(--color-muted)]">Pipeline health, margins, and resource load.</p>
       </div>
 
-      <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <Kpi label="Total Estimates" value={String(data.kpis.totalEstimates)} />
-        <Kpi label="Won / Lost" value={`${data.kpis.wonDeals} / ${data.kpis.lostDeals}`} />
-        <Kpi label="Average Margin" value={pct(data.kpis.averageMargin)} />
+      <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <Kpi label="Total Estimates" value={String(total)} />
+        <Kpi
+          label="Won"
+          value={`${data.kpis.wonDeals} / ${total}`}
+          hint={shareOfTotal(data.kpis.wonDeals, total)}
+        />
+        <Kpi
+          label="Lost"
+          value={`${data.kpis.lostDeals} / ${total}`}
+          hint={shareOfTotal(data.kpis.lostDeals, total)}
+        />
+        <Kpi
+          label="Average Margin"
+          value={pct(data.kpis.averageMargin)}
+          hint="Average gross profit margin %"
+        />
         <Kpi label="Revenue Pipeline" value={money(data.kpis.revenuePipeline)} />
         <Kpi label="Avg Selling Price" value={money(data.kpis.averageSellingPrice)} />
-        <Kpi label="Avg Dev Cost" value={money(data.kpis.averageDevelopmentCost)} />
-        <Kpi
-          label="Avg Duration"
-          value={`${Math.round(data.kpis.averageProjectDuration || 0)}d`}
-        />
-        <Kpi label="Resource Utilization" value={pct(data.kpis.resourceUtilization, 0)} />
       </div>
 
       <div className="card p-4 space-y-3">

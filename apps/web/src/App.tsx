@@ -10,10 +10,11 @@ import { EstimateDetailPage } from './pages/EstimateDetailPage';
 import { ClientsPage } from './pages/ClientsPage';
 import { TemplatesPage } from './pages/TemplatesPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { PageLoader } from './components/Loader';
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="p-8 text-[var(--color-muted)]">Loading…</div>;
+  if (loading) return <div className="p-8"><PageLoader label="Loading…" /></div>;
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }

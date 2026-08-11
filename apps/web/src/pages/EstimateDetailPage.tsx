@@ -13,11 +13,13 @@ import {
 import { api, money, pct } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { MarginHealthBox } from '../components/MarginHealth';
+import { PageLoader, Spinner } from '../components/Loader';
 
 export function EstimateDetailPage() {
   const { id } = useParams();
   const { token } = useAuth();
   const [estimate, setEstimate] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   async function load() {
@@ -26,7 +28,10 @@ export function EstimateDetailPage() {
   }
 
   useEffect(() => {
-    load().catch(console.error);
+    setLoading(true);
+    load()
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [id, token]);
 
   async function transition(action: string) {
@@ -67,7 +72,7 @@ export function EstimateDetailPage() {
     a.click();
   }
 
-  if (!estimate) return <div className="text-[var(--color-muted)]">Loading estimate…</div>;
+  if (loading || !estimate) return <PageLoader label="Loading estimate…" />;
   const calc = estimate.calculation;
 
   return (
@@ -82,7 +87,12 @@ export function EstimateDetailPage() {
             {estimate.estimateNumber} · {estimate.client?.name ?? 'No client'} · v{estimate.currentVersion}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {busy && (
+            <span className="inline-flex items-center gap-2 text-sm text-[var(--color-muted)] mr-1">
+              <Spinner /> Processing…
+            </span>
+          )}
           <button className="btn btn-ghost" disabled={busy} onClick={() => transition('SUBMIT')}>
             Submit Review
           </button>
@@ -98,7 +108,7 @@ export function EstimateDetailPage() {
           <button className="btn btn-ghost" disabled={busy} onClick={() => markDeal('LOST')}>
             Mark Lost
           </button>
-          <button className="btn btn-primary" onClick={exportCsv}>
+          <button className="btn btn-primary" disabled={busy} onClick={exportCsv}>
             Export CSV
           </button>
         </div>
