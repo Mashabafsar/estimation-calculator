@@ -83,6 +83,10 @@ interface CalcResult {
   }>;
   sprintCount: number;
   sprintWeeks: number;
+  sprintFormula?: string;
+  warrantyMonths?: number;
+  engagementFeeSource?: 'negotiated_price' | 'labour_revenue';
+  targetMarginPct?: number;
 }
 
 type FormValues = {
@@ -92,10 +96,7 @@ type FormValues = {
   templateId: string;
   complexity: string;
   negotiatedPrice: number | '';
-  startDate: string;
-  expectedDelivery: string;
-  sprintCount: number;
-  sprintWeeks: number;
+  warrantyMonths: number;
   resources: Array<{
     roleId: string;
     roleName: string;
@@ -121,6 +122,8 @@ export function EstimateFormPage() {
   const [calc, setCalc] = useState<CalcResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [expandedSprint, setExpandedSprint] = useState<number | null>(null);
+  const [uploadMsg, setUploadMsg] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   const { register, control, watch, setValue, handleSubmit, getValues } = useForm<FormValues>({
     defaultValues: {
@@ -130,10 +133,7 @@ export function EstimateFormPage() {
       templateId: '',
       complexity: 'MEDIUM',
       negotiatedPrice: '',
-      startDate: '',
-      expectedDelivery: '',
-      sprintCount: 10,
-      sprintWeeks: 2,
+      warrantyMonths: 3,
       resources: [],
       expenses: [],
     },
@@ -142,6 +142,8 @@ export function EstimateFormPage() {
   const resources = useFieldArray({ control, name: 'resources' });
   const expenses = useFieldArray({ control, name: 'expenses' });
   const templateId = watch('templateId');
+  const negotiatedPrice = watch('negotiatedPrice');
+  const warrantyMonths = watch('warrantyMonths');
 
   useEffect(() => {
     Promise.all([
@@ -183,9 +185,77 @@ export function EstimateFormPage() {
         isRecurring: true,
       },
     ]);
-    setValue('sprintCount', tpl.defaultSprintCount ?? 10);
-    setValue('sprintWeeks', tpl.defaultSprintWeeks ?? 2);
   }, [templateId, templates]);
+
+  async function onUploadSource(file: File) {
+    setUploading(true);
+    setUploadMsg('');
+    try {
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const contentBase64 = btoa(binary);
+
+      const parsed = await api<{
+        projectTitle: string | null;
+        departments: Array<{
+          name: string;
+          hours: number;
+          roleId?: string;
+          roleName?: string;
+          location?: 'ONSHORE' | 'OFFSHORE';
+          hourlyCost?: number;
+          hourlyBilling?: number;
+          matched: boolean;
+        }>;
+        totalHours: number;
+        warnings: string[];
+      }>('/estimates/parse-source', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ fileName: file.name, contentBase64 }),
+      });
+
+      if (parsed.projectTitle && !getValues('projectName')) {
+        const title = parsed.projectTitle.split('\n')[0].trim();
+        setValue('projectName', title);
+      }
+
+      const mapped = parsed.departments
+        .filter((d) => d.hours > 0)
+        .map((d) => {
+          const role =
+            roles.find((r) => r.id === d.roleId) ||
+            roles.find((r) => r.name === d.roleName) ||
+            roles.find((r) => r.name.toLowerCase().includes(d.name.toLowerCase()));
+          return {
+            roleId: role?.id || d.roleId || roles[0]?.id || '',
+            roleName: role?.name || d.roleName || d.name,
+            location: (d.location || role?.defaultLocation || 'OFFSHORE') as 'ONSHORE' | 'OFFSHORE',
+            hours: d.hours,
+            hourlyCost: Number(d.hourlyCost ?? role?.hourlyCostRate ?? 0),
+            hourlyBilling: Number(d.hourlyBilling ?? role?.hourlyBillingRate ?? 0),
+          };
+        });
+
+      if (!mapped.length) {
+        setUploadMsg('No department hours found in the file.');
+        return;
+      }
+
+      resources.replace(mapped);
+      setUploadMsg(
+        `Loaded ${mapped.length} departments · ${parsed.totalHours}h` +
+          (parsed.warnings?.length ? ` · ${parsed.warnings.join('; ')}` : ''),
+      );
+      setCalc(null);
+    } catch (e: any) {
+      setUploadMsg(e.message || 'Failed to parse file');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function preview() {
     const values = getValues();
@@ -236,7 +306,7 @@ export function EstimateFormPage() {
         <div>
           <h1 className="text-2xl font-semibold">New Estimate</h1>
           <p className="text-sm text-[var(--color-muted)]">
-            Department hour totals and sprint breakdown are calculated on the backend.
+            Upload a Hours Breakdown workbook or pick a template. Target margin defaults to 50%.
           </p>
         </div>
         <div className="flex gap-2">
@@ -251,6 +321,32 @@ export function EstimateFormPage() {
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
+          <div className="card p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-semibold">Hours Source (Excel)</h2>
+                <p className="text-xs text-[var(--color-muted)] mt-0.5">
+                  Upload Boxer-style Hours Breakdown (.xlsx). Departments & hours are loaded and remain editable.
+                </p>
+              </div>
+              <label className="btn btn-ghost cursor-pointer">
+                {uploading ? 'Parsing…' : 'Upload .xlsx'}
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) onUploadSource(f);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            </div>
+            {uploadMsg && <div className="text-xs text-[var(--color-accent)]">{uploadMsg}</div>}
+          </div>
+
           <div className="card p-4 grid sm:grid-cols-2 gap-3">
             <label className="text-sm space-y-1 sm:col-span-2">
               <span className="font-medium">Project Name</span>
@@ -270,7 +366,7 @@ export function EstimateFormPage() {
             <label className="text-sm space-y-1">
               <span className="font-medium">Service Template</span>
               <select className="input" {...register('templateId')}>
-                <option value="">Select template</option>
+                <option value="">Select template (optional)</option>
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -296,39 +392,38 @@ export function EstimateFormPage() {
                 step="0.01"
                 {...register('negotiatedPrice', { valueAsNumber: true })}
               />
+              <span className="text-[11px] text-[var(--color-muted)]">
+                {negotiatedPrice !== '' && Number(negotiatedPrice) > 0
+                  ? 'Engagement Fee will equal this Negotiated Price'
+                  : 'Leave empty → Engagement Fee = Labour Revenue (billable hours)'}
+              </span>
             </label>
             <label className="text-sm space-y-1">
-              <span className="font-medium">Start Date</span>
-              <input className="input" type="date" {...register('startDate')} />
-            </label>
-            <label className="text-sm space-y-1">
-              <span className="font-medium">Expected Delivery</span>
-              <input className="input" type="date" {...register('expectedDelivery')} />
-            </label>
-            <label className="text-sm space-y-1">
-              <span className="font-medium">Sprint Count</span>
+              <span className="font-medium">Warranty Period (months)</span>
               <input
                 className="input"
                 type="number"
-                min={1}
-                max={30}
-                {...register('sprintCount', { valueAsNumber: true })}
+                min={0}
+                max={24}
+                step={1}
+                {...register('warrantyMonths', { valueAsNumber: true })}
               />
-            </label>
-            <label className="text-sm space-y-1">
-              <span className="font-medium">Sprint Weeks</span>
-              <input
-                className="input"
-                type="number"
-                min={1}
-                max={8}
-                {...register('sprintWeeks', { valueAsNumber: true })}
-              />
+              <span className="text-[11px] text-[var(--color-muted)]">
+                {Number(warrantyMonths) || 0} month
+                {Number(warrantyMonths) === 1 ? '' : 's'} × 1% ={' '}
+                {((Number(warrantyMonths) || 0) * 1).toFixed(0)}% held in warranty payments
+              </span>
             </label>
             <label className="text-sm space-y-1 sm:col-span-2">
               <span className="font-medium">Description</span>
               <textarea className="input min-h-20" {...register('description')} />
             </label>
+            <div className="sm:col-span-2 rounded-lg bg-[var(--color-canvas)] px-3 py-2 text-xs text-[var(--color-muted)]">
+              Target margin: <strong className="text-[var(--color-ink)]">50%</strong> · Advance
+              payment: <strong className="text-[var(--color-ink)]">30%</strong> · Sprint weeks fixed
+              at <strong className="text-[var(--color-ink)]">2</strong> · Sprint count
+              auto-calculated from heaviest department hours
+            </div>
           </div>
 
           <div className="card p-4 space-y-3">
@@ -581,8 +676,13 @@ export function EstimateFormPage() {
 
           {calc?.sprintBreakdown?.length ? (
             <div className="card overflow-hidden">
-              <div className="px-4 py-3 border-b border-[var(--color-line)] font-semibold">
-                Sprint / Milestone Breakdown ({calc.sprintCount} sprints × {calc.sprintWeeks} weeks)
+              <div className="px-4 py-3 border-b border-[var(--color-line)]">
+                <div className="font-semibold">
+                  Sprint / Milestone Breakdown ({calc.sprintCount} sprints × {calc.sprintWeeks} weeks)
+                </div>
+                {calc.sprintFormula && (
+                  <div className="text-xs text-[var(--color-muted)] mt-1 font-mono">{calc.sprintFormula}</div>
+                )}
               </div>
               <table className="w-full text-sm">
                 <thead className="text-left text-[var(--color-muted)] bg-[var(--color-canvas)]">
@@ -656,6 +756,11 @@ export function EstimateFormPage() {
                   <div>
                     <div className="text-[var(--color-muted)] text-xs">Engagement Fee</div>
                     <div className="font-semibold text-lg">{money(calc.engagementFee)}</div>
+                    <div className="text-[11px] text-[var(--color-muted)]">
+                      {calc.engagementFeeSource === 'negotiated_price'
+                        ? '= Negotiated Price'
+                        : '= Labour Revenue'}
+                    </div>
                   </div>
                   <div>
                     <div className="text-[var(--color-muted)] text-xs">Direct Costs</div>
@@ -668,7 +773,7 @@ export function EstimateFormPage() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-[var(--color-muted)] text-xs">Margin %</div>
+                    <div className="text-[var(--color-muted)] text-xs">Margin % (target 50%)</div>
                     <div className={`font-semibold text-lg ${healthColor}`}>
                       {pct(calc.grossMarginPct)}
                     </div>
@@ -678,12 +783,15 @@ export function EstimateFormPage() {
                     <div className="font-semibold">{calc.totalHours}</div>
                   </div>
                   <div>
-                    <div className="text-[var(--color-muted)] text-xs">Departments</div>
-                    <div className="font-semibold">{calc.departmentTotals?.length ?? 0}</div>
+                    <div className="text-[var(--color-muted)] text-xs">Auto Sprints</div>
+                    <div className="font-semibold">
+                      {calc.sprintCount} × {calc.sprintWeeks}w
+                    </div>
                   </div>
                   <div>
                     <div className="text-[var(--color-muted)] text-xs">Recommended Price</div>
                     <div className="font-semibold">{money(calc.recommendedPrice)}</div>
+                    <div className="text-[11px] text-[var(--color-muted)]">at 50% target margin</div>
                   </div>
                   <div>
                     <div className="text-[var(--color-muted)] text-xs">Excess / Deficit</div>

@@ -9,6 +9,7 @@ import * as templatesService from '../services/templates.service.js';
 import * as clientsService from '../services/clients.service.js';
 import * as estimatesService from '../services/estimates.service.js';
 import * as dashboardService from '../services/dashboard.service.js';
+import * as hoursSourceService from '../services/hoursSource.service.js';
 import {
   ApprovalAction,
   Complexity,
@@ -56,6 +57,9 @@ const estimateSchema = z.object({
   resources: z.array(resourceSchema).default([]),
   expenses: z.array(expenseSchema).default([]),
 });
+
+// startDate / expectedDelivery / sprintCount / sprintWeeks kept optional for backward compatibility
+// but UI no longer collects them — sprint count is calculated from department hours.
 
 const templateRoleSchema = z.object({
   roleId: z.string().min(1),
@@ -369,6 +373,26 @@ router.patch(
 );
 
 // Estimates
+router.post(
+  '/estimates/parse-source',
+  authenticate,
+  requireWrite,
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        fileName: z.string().optional(),
+        contentBase64: z.string().min(1),
+      })
+      .parse(req.body);
+    const raw = body.contentBase64.includes(',')
+      ? body.contentBase64.split(',')[1]
+      : body.contentBase64;
+    const buffer = Buffer.from(raw, 'base64');
+    const data = await hoursSourceService.parseHoursSourceAndMapRoles(buffer);
+    res.json({ success: true, data });
+  }),
+);
+
 router.get(
   '/estimates',
   authenticate,

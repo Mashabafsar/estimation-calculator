@@ -260,6 +260,8 @@ model Estimate {
   discountPct      Decimal?       @db.Decimal(8, 4)
   sprintCount      Int?
   sprintWeeks      Int?
+  /// Warranty period months in payment plan (1% of fee per month). Default 3.
+  warrantyMonths   Int            @default(3)
   /// Override template sprint plan for this estimate [{ name, percentage }]
   sprintPaymentPlan Json?
   currentVersion   Int            @default(1)

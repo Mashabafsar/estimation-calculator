@@ -59,12 +59,14 @@ export interface CalculateInput {
   settings: CalcSettings;
   paymentTerms: PaymentTermRule[];
   projectDurationDays?: number | null;
-  /** Number of delivery sprints (used when sprintPlan not provided) */
+  /** @deprecated Auto-calculated from hours; ignored when provided unless force */
   sprintCount?: number | null;
-  /** Weeks per sprint (informational / timeline) */
+  /** Always fixed at 2 weeks */
   sprintWeeks?: number | null;
   /** Custom milestone plan (from template or estimate). Percentages 0–1. */
   sprintPlan?: SprintMilestoneInput[] | null;
+  /** Warranty period length in months (1% of fee retained per month). Default 3. */
+  warrantyMonths?: number | null;
 }
 
 export interface DepartmentTotal {
@@ -163,6 +165,16 @@ export interface CalculateResult {
   sprintBreakdown: SprintBreakdownItem[];
   sprintCount: number;
   sprintWeeks: number;
+  /** Human-readable sprint formula used */
+  sprintFormula: string;
+  /** Warranty period months used in payment plan (1% per month) */
+  warrantyMonths: number;
+  /**
+   * Engagement fee rule (Excel/HTML):
+   * negotiatedPrice > 0  → engagementFee = negotiatedPrice
+   * otherwise            → engagementFee = labourRevenue
+   */
+  engagementFeeSource: 'negotiated_price' | 'labour_revenue';
 }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -235,14 +247,51 @@ export function buildDepartmentTotals(
 }
 
 /**
- * Default sprint/payment plan inspired by Boxer Property estimate workbook.
- * Percentages sum to 1.0.
+ * Sprint count formula (fixed 2-week sprints):
+ * personHoursPerSprint = workingHoursPerDay × 5 days × 2 weeks
+ * sprintCount = ceil( max(departmentHours) / personHoursPerSprint )
+ *
+ * Uses the heaviest department as critical path (teams work in parallel).
+ * Minimum 1 sprint.
  */
-export function defaultSprintPlan(sprintCount = 10): SprintMilestoneInput[] {
+export const FIXED_SPRINT_WEEKS = 2;
+
+export function calculateSprintCount(
+  departmentTotals: DepartmentTotal[],
+  totalHours: number,
+  workingHoursPerDay = 8,
+): { sprintCount: number; sprintWeeks: number; formula: string; personHoursPerSprint: number } {
+  const sprintWeeks = FIXED_SPRINT_WEEKS;
+  const personHoursPerSprint = workingHoursPerDay * 5 * sprintWeeks; // e.g. 8×5×2 = 80
+  const maxDeptHours = departmentTotals.reduce((m, d) => Math.max(m, d.hours), 0);
+  const basisHours = maxDeptHours > 0 ? maxDeptHours : totalHours;
+  const sprintCount = Math.max(1, Math.ceil(basisHours / personHoursPerSprint));
+  const formula =
+    maxDeptHours > 0
+      ? `ceil(maxDeptHours ${maxDeptHours} ÷ (${workingHoursPerDay}h × 5d × ${sprintWeeks}w = ${personHoursPerSprint}h)) = ${sprintCount}`
+      : `ceil(totalHours ${totalHours} ÷ ${personHoursPerSprint}h/sprint) = ${sprintCount}`;
+  return { sprintCount, sprintWeeks, formula, personHoursPerSprint };
+}
+/** Share of engagement fee held per warranty month (Excel: 1% × N months). */
+export const WARRANTY_PCT_PER_MONTH = 0.01;
+/** Advance payment due upon acceptance. */
+export const ADVANCE_PAYMENT_PCT = 0.3;
+export const DEFAULT_WARRANTY_MONTHS = 3;
+
+export function normalizeWarrantyMonths(value?: number | null): number {
+  if (value == null || Number.isNaN(Number(value))) return DEFAULT_WARRANTY_MONTHS;
+  return Math.max(0, Math.min(24, Math.round(Number(value))));
+}
+
+export function defaultSprintPlan(
+  sprintCount = 10,
+  warrantyMonths: number = DEFAULT_WARRANTY_MONTHS,
+): SprintMilestoneInput[] {
   const n = Math.max(1, Math.min(sprintCount, 20));
-  const advance = 0.2;
+  const months = normalizeWarrantyMonths(warrantyMonths);
+  const advance = ADVANCE_PAYMENT_PCT;
   const design = 0.12;
-  const warranty = 0.03; // 1% × 3 months
+  const warranty = WARRANTY_PCT_PER_MONTH * months;
   const sit = 0.1;
   const uat = 0.07;
   const deliveryPool = Math.max(0, 1 - advance - design - sit - uat - warranty);
@@ -257,9 +306,12 @@ export function defaultSprintPlan(sprintCount = 10): SprintMilestoneInput[] {
   }
   plan.push({ name: 'Payment – Upon Completion of SIT', percentage: sit });
   plan.push({ name: 'Payment – Upon Completion of UAT', percentage: uat });
-  plan.push({ name: 'Payment – Warranty Period – Month 1', percentage: 0.01 });
-  plan.push({ name: 'Payment – Warranty Period – Month 2', percentage: 0.01 });
-  plan.push({ name: 'Payment – Warranty Period – Month 3', percentage: 0.01 });
+  for (let m = 1; m <= months; m++) {
+    plan.push({
+      name: `Payment – Warranty Period – Month ${m}`,
+      percentage: WARRANTY_PCT_PER_MONTH,
+    });
+  }
 
   // Fix rounding drift on last delivery sprint
   const sum = plan.reduce((s, p) => s + p.percentage, 0);
@@ -278,12 +330,14 @@ export function buildSprintBreakdown(opts: {
   sprintPlan?: SprintMilestoneInput[] | null;
   sprintCount?: number | null;
   sprintWeeks?: number | null;
+  warrantyMonths?: number | null;
 }): SprintBreakdownItem[] {
   const weeks = opts.sprintWeeks && opts.sprintWeeks > 0 ? opts.sprintWeeks : 2;
+  const warrantyMonths = normalizeWarrantyMonths(opts.warrantyMonths);
   const plan =
     opts.sprintPlan && opts.sprintPlan.length
       ? opts.sprintPlan
-      : defaultSprintPlan(opts.sprintCount ?? 10);
+      : defaultSprintPlan(opts.sprintCount ?? 10, warrantyMonths);
 
   const rawSum = plan.reduce((s, p) => s + Number(p.percentage || 0), 0);
   const norm = rawSum > 0 ? rawSum : 1;
@@ -501,8 +555,15 @@ export function calculateEstimate(input: CalculateInput): CalculateResult {
   // Hours Breakdown — total hours per selected department/role
   const departmentTotals = buildDepartmentTotals(resourceBreakdown);
 
-  const sprintCount = Math.max(1, Number(input.sprintCount) || 10);
-  const sprintWeeks = Math.max(1, Number(input.sprintWeeks) || 2);
+  // Auto sprint count (2-week sprints); ignore manual sprint inputs
+  const sprintMeta = calculateSprintCount(
+    departmentTotals,
+    totalHours,
+    settings.workingHoursPerDay,
+  );
+  const sprintCount = sprintMeta.sprintCount;
+  const sprintWeeks = sprintMeta.sprintWeeks;
+  const warrantyMonths = normalizeWarrantyMonths(input.warrantyMonths);
   const sprintBreakdown = buildSprintBreakdown({
     fee: engagementFee,
     totalHours,
@@ -510,7 +571,11 @@ export function calculateEstimate(input: CalculateInput): CalculateResult {
     sprintPlan: input.sprintPlan,
     sprintCount,
     sprintWeeks,
+    warrantyMonths,
   });
+
+  const engagementFeeSource =
+    negotiated != null && negotiated > 0 ? 'negotiated_price' : 'labour_revenue';
 
   return {
     totalHours,
@@ -565,6 +630,9 @@ export function calculateEstimate(input: CalculateInput): CalculateResult {
     sprintBreakdown,
     sprintCount,
     sprintWeeks,
+    sprintFormula: sprintMeta.formula,
+    warrantyMonths,
+    engagementFeeSource,
   };
 }
 

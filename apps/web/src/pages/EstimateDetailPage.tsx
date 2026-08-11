@@ -112,6 +112,11 @@ export function EstimateDetailPage() {
         <div className="card p-4">
           <div className="text-xs text-[var(--color-muted)]">Engagement Fee</div>
           <div className="font-semibold mt-1">{money(calc?.engagementFee)}</div>
+          {calc && (
+            <div className="text-[11px] text-[var(--color-muted)] mt-1">
+              {Number(estimate.negotiatedPrice) > 0 ? '= Negotiated Price' : '= Labour Revenue'}
+            </div>
+          )}
         </div>
         <div className="card p-4">
           <div className="text-xs text-[var(--color-muted)]">Direct Margin</div>
@@ -167,6 +172,12 @@ export function EstimateDetailPage() {
             <div>
               <div className="text-xs text-[var(--color-muted)]">Payment Terms</div>
               <div className="font-medium">{calc?.paymentTerms ?? '—'}</div>
+            </div>
+            <div>
+              <div className="text-xs text-[var(--color-muted)]">Warranty Period</div>
+              <div className="font-medium">
+                {estimate.warrantyMonths ?? calc?.warrantyMonths ?? 3} months
+              </div>
             </div>
           </div>
           <div className="space-y-2">
@@ -251,8 +262,7 @@ export function EstimateDetailPage() {
         <div className="card overflow-hidden">
           <div className="px-4 py-3 border-b border-[var(--color-line)] font-semibold">
             Sprint / Milestone Breakdown
-            {estimate.sprintCount ? ` · ${estimate.sprintCount} sprints` : ''}
-            {estimate.sprintWeeks ? ` × ${estimate.sprintWeeks} weeks` : ''}
+            {calc?.sprintCount ? ` · ${calc.sprintCount} sprints × ${calc?.sprintWeeks ?? 2} weeks` : ''}
           </div>
           <table className="w-full text-sm">
             <thead className="text-left text-[var(--color-muted)] bg-[var(--color-canvas)]">

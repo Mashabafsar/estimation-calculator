@@ -108,8 +108,6 @@ describe('calculateEstimate (Excel/HTML parity)', () => {
       ],
       expenses: [],
       negotiatedPrice: 50000,
-      sprintCount: 4,
-      sprintWeeks: 2,
       settings: {
         ...DEFAULT_CALC_SETTINGS,
         riskPct: 0,
@@ -129,10 +127,79 @@ describe('calculateEstimate (Excel/HTML parity)', () => {
     const qa = result.departmentTotals.find((d) => d.department === 'QA');
     assert.ok(qa);
     assert.equal(qa!.hours, 120);
+    // Auto sprint: ceil(120 / 80) = 2
+    assert.equal(result.sprintWeeks, 2);
+    assert.equal(result.sprintCount, 2);
+    assert.equal(result.engagementFeeSource, 'negotiated_price');
+    assert.equal(result.engagementFee, 50000);
+    assert.equal(result.targetMarginPct, 50);
     assert.ok(result.sprintBreakdown.length > 4);
     const advance = result.sprintBreakdown[0];
-    assert.equal(advance.percentage, 0.2);
-    assert.equal(advance.amount, 10000);
-    assert.equal(advance.hours, 32);
+    assert.equal(advance.percentage, 0.3);
+    assert.equal(advance.amount, 15000);
+    assert.equal(result.warrantyMonths, 3);
+    const warrantyLines = result.sprintBreakdown.filter((s) =>
+      s.name.includes('Warranty Period'),
+    );
+    assert.equal(warrantyLines.length, 3);
+    assert.equal(warrantyLines[0].percentage, 0.01);
+  });
+
+  it('builds warranty months from input', () => {
+    const result = calculateEstimate({
+      resources: [
+        {
+          roleName: 'Code Development',
+          location: 'OFFSHORE',
+          hours: 80,
+          hourlyCost: 8,
+          hourlyBilling: 45,
+        },
+      ],
+      expenses: [],
+      negotiatedPrice: 10000,
+      warrantyMonths: 6,
+      settings: {
+        ...DEFAULT_CALC_SETTINGS,
+        riskPct: 0,
+        contingencyPct: 0,
+        infrastructurePct: 0,
+        overheadPct: 0,
+        supportPct: 0,
+        warrantyPct: 0,
+        maintenancePct: 0,
+      },
+      paymentTerms: [
+        { label: 'Projects $4k–$10k', minAmount: 4000, maxAmount: 10999.99, warrantyDays: 15, terms: 'Net 7 Days' },
+      ],
+    });
+    assert.equal(result.warrantyMonths, 6);
+    const warrantyLines = result.sprintBreakdown.filter((s) =>
+      s.name.includes('Warranty Period'),
+    );
+    assert.equal(warrantyLines.length, 6);
+    assert.equal(result.sprintBreakdown[0].percentage, 0.3);
+  });
+
+  it('uses labour revenue as engagement fee when no negotiated price', () => {
+    const result = calculateEstimate({
+      resources: [
+        {
+          roleName: 'Code Development',
+          location: 'OFFSHORE',
+          hours: 10,
+          hourlyCost: 8,
+          hourlyBilling: 45,
+        },
+      ],
+      expenses: [],
+      negotiatedPrice: null,
+      settings: { ...DEFAULT_CALC_SETTINGS, riskPct: 0, contingencyPct: 0, infrastructurePct: 0, overheadPct: 0, supportPct: 0, warrantyPct: 0, maintenancePct: 0 },
+      paymentTerms: [
+        { label: 'Projects < $4k', minAmount: 0, maxAmount: 3999.99, warrantyDays: 7, terms: 'Net 3 Days' },
+      ],
+    });
+    assert.equal(result.engagementFeeSource, 'labour_revenue');
+    assert.equal(result.engagementFee, result.labourRevenue);
   });
 });
