@@ -50,6 +50,7 @@ const estimateSchema = z.object({
   negotiatedPrice: z.number().nullable().optional(),
   sprintCount: z.number().int().min(1).max(30).nullable().optional(),
   sprintWeeks: z.number().int().min(1).max(8).nullable().optional(),
+  warrantyMonths: z.number().int().min(0).max(24).nullable().optional(),
   sprintPaymentPlan: z
     .array(z.object({ name: z.string(), percentage: z.number().min(0).max(1) }))
     .nullable()

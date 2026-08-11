@@ -263,9 +263,11 @@ export function EstimateFormPage() {
     setCalculating(true);
     try {
       const values = getValues();
+      const warrantyMonths = Number(values.warrantyMonths);
       const payload = {
         ...values,
         negotiatedPrice: values.negotiatedPrice === '' ? null : Number(values.negotiatedPrice),
+        warrantyMonths: Number.isFinite(warrantyMonths) ? warrantyMonths : 3,
         clientId: values.clientId || undefined,
         templateId: values.templateId || undefined,
       };
@@ -283,9 +285,11 @@ export function EstimateFormPage() {
   async function onSubmit(values: FormValues) {
     setSaving(true);
     try {
+      const warrantyMonths = Number(values.warrantyMonths);
       const payload = {
         ...values,
         negotiatedPrice: values.negotiatedPrice === '' ? null : Number(values.negotiatedPrice),
+        warrantyMonths: Number.isFinite(warrantyMonths) ? warrantyMonths : 3,
         clientId: values.clientId || undefined,
         templateId: values.templateId || undefined,
       };
