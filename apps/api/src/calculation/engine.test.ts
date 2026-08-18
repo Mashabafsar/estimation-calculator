@@ -137,15 +137,14 @@ describe('calculateEstimate (Excel/HTML parity)', () => {
     const advance = result.sprintBreakdown[0];
     assert.equal(advance.percentage, 0.3);
     assert.equal(advance.amount, 15000);
-    assert.equal(result.warrantyMonths, 3);
+    assert.equal(result.warrantyPeriodDays, 0);
     const warrantyLines = result.sprintBreakdown.filter((s) =>
       s.name.includes('Warranty Period'),
     );
-    assert.equal(warrantyLines.length, 3);
-    assert.equal(warrantyLines[0].percentage, 0.01);
+    assert.equal(warrantyLines.length, 0);
   });
 
-  it('builds warranty months from input', () => {
+  it('builds warranty payment blocks from period days', () => {
     const result = calculateEstimate({
       resources: [
         {
@@ -158,7 +157,7 @@ describe('calculateEstimate (Excel/HTML parity)', () => {
       ],
       expenses: [],
       negotiatedPrice: 10000,
-      warrantyMonths: 6,
+      warrantyPeriodDays: 180,
       settings: {
         ...DEFAULT_CALC_SETTINGS,
         riskPct: 0,
@@ -173,7 +172,7 @@ describe('calculateEstimate (Excel/HTML parity)', () => {
         { label: 'Projects $4k–$10k', minAmount: 4000, maxAmount: 10999.99, warrantyDays: 15, terms: 'Net 7 Days' },
       ],
     });
-    assert.equal(result.warrantyMonths, 6);
+    assert.equal(result.warrantyPeriodDays, 180);
     const warrantyLines = result.sprintBreakdown.filter((s) =>
       s.name.includes('Warranty Period'),
     );

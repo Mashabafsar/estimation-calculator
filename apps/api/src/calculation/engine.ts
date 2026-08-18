@@ -65,8 +65,11 @@ export interface CalculateInput {
   sprintWeeks?: number | null;
   /** Custom milestone plan (from template or estimate). Percentages 0–1. */
   sprintPlan?: SprintMilestoneInput[] | null;
-  /** Warranty period length in months (1% of fee retained per month). Default 3. */
-  warrantyMonths?: number | null;
+  /**
+   * Warranty period length in days for payment plan.
+   * Converted to 30-day blocks at 1% of fee each. Default 0 (no warranty hold).
+   */
+  warrantyPeriodDays?: number | null;
 }
 
 export interface DepartmentTotal {
@@ -167,8 +170,8 @@ export interface CalculateResult {
   sprintWeeks: number;
   /** Human-readable sprint formula used */
   sprintFormula: string;
-  /** Warranty period months used in payment plan (1% per month) */
-  warrantyMonths: number;
+  /** Warranty period days used for payment-plan hold (estimate input). */
+  warrantyPeriodDays: number;
   /**
    * Engagement fee rule (Excel/HTML):
    * negotiatedPrice > 0  → engagementFee = negotiatedPrice
@@ -272,26 +275,35 @@ export function calculateSprintCount(
       : `ceil(totalHours ${totalHours} ÷ ${personHoursPerSprint}h/sprint) = ${sprintCount}`;
   return { sprintCount, sprintWeeks, formula, personHoursPerSprint };
 }
-/** Share of engagement fee held per warranty month (Excel: 1% × N months). */
+/** Share of engagement fee held per 30-day warranty block (Excel: 1% × N months). */
 export const WARRANTY_PCT_PER_MONTH = 0.01;
 /** Advance payment due upon acceptance. */
 export const ADVANCE_PAYMENT_PCT = 0.3;
-export const DEFAULT_WARRANTY_MONTHS = 3;
+export const DEFAULT_WARRANTY_PERIOD_DAYS = 0;
 
-export function normalizeWarrantyMonths(value?: number | null): number {
-  if (value == null || Number.isNaN(Number(value))) return DEFAULT_WARRANTY_MONTHS;
-  return Math.max(0, Math.min(24, Math.round(Number(value))));
+/** Convert warranty days → number of 30-day payment blocks (1% each). */
+export function warrantyBlocksFromDays(value?: number | null): number {
+  if (value == null || Number.isNaN(Number(value))) return 0;
+  const days = Math.max(0, Math.min(730, Math.round(Number(value))));
+  if (days <= 0) return 0;
+  return Math.ceil(days / 30);
+}
+
+export function normalizeWarrantyPeriodDays(value?: number | null): number {
+  if (value == null || Number.isNaN(Number(value))) return DEFAULT_WARRANTY_PERIOD_DAYS;
+  return Math.max(0, Math.min(730, Math.round(Number(value))));
 }
 
 export function defaultSprintPlan(
   sprintCount = 10,
-  warrantyMonths: number = DEFAULT_WARRANTY_MONTHS,
+  warrantyPeriodDays: number = DEFAULT_WARRANTY_PERIOD_DAYS,
 ): SprintMilestoneInput[] {
   const n = Math.max(1, Math.min(sprintCount, 20));
-  const months = normalizeWarrantyMonths(warrantyMonths);
+  const days = normalizeWarrantyPeriodDays(warrantyPeriodDays);
+  const blocks = warrantyBlocksFromDays(days);
   const advance = ADVANCE_PAYMENT_PCT;
   const design = 0.12;
-  const warranty = WARRANTY_PCT_PER_MONTH * months;
+  const warranty = WARRANTY_PCT_PER_MONTH * blocks;
   const sit = 0.1;
   const uat = 0.07;
   const deliveryPool = Math.max(0, 1 - advance - design - sit - uat - warranty);
@@ -306,9 +318,11 @@ export function defaultSprintPlan(
   }
   plan.push({ name: 'Payment – Upon Completion of SIT', percentage: sit });
   plan.push({ name: 'Payment – Upon Completion of UAT', percentage: uat });
-  for (let m = 1; m <= months; m++) {
+  for (let m = 1; m <= blocks; m++) {
+    const from = (m - 1) * 30 + 1;
+    const to = Math.min(m * 30, days);
     plan.push({
-      name: `Payment – Warranty Period – Month ${m}`,
+      name: `Payment – Warranty Period – Days ${from}–${to}`,
       percentage: WARRANTY_PCT_PER_MONTH,
     });
   }
@@ -330,20 +344,19 @@ export function buildSprintBreakdown(opts: {
   sprintPlan?: SprintMilestoneInput[] | null;
   sprintCount?: number | null;
   sprintWeeks?: number | null;
-  warrantyMonths?: number | null;
+  warrantyPeriodDays?: number | null;
 }): SprintBreakdownItem[] {
   const weeks = opts.sprintWeeks && opts.sprintWeeks > 0 ? opts.sprintWeeks : 2;
-  const warrantyMonths = normalizeWarrantyMonths(opts.warrantyMonths);
+  const warrantyPeriodDays = normalizeWarrantyPeriodDays(opts.warrantyPeriodDays);
   const plan =
     opts.sprintPlan && opts.sprintPlan.length
       ? opts.sprintPlan
-      : defaultSprintPlan(opts.sprintCount ?? 10, warrantyMonths);
+      : defaultSprintPlan(opts.sprintCount ?? 10, warrantyPeriodDays);
 
-  const rawSum = plan.reduce((s, p) => s + Number(p.percentage || 0), 0);
-  const norm = rawSum > 0 ? rawSum : 1;
-
+  // Use percentages as absolute shares of fee (do not renormalize) so editable
+  // payment % totals can deviate from 100% and still reflect user input.
   return plan.map((m, order) => {
-    const percentage = round4(Number(m.percentage || 0) / norm);
+    const percentage = round4(Number(m.percentage || 0));
     const amount = round2(opts.fee * percentage);
     const hours = round2(opts.totalHours * percentage);
     return {
@@ -563,7 +576,7 @@ export function calculateEstimate(input: CalculateInput): CalculateResult {
   );
   const sprintCount = sprintMeta.sprintCount;
   const sprintWeeks = sprintMeta.sprintWeeks;
-  const warrantyMonths = normalizeWarrantyMonths(input.warrantyMonths);
+  const warrantyPeriodDays = normalizeWarrantyPeriodDays(input.warrantyPeriodDays);
   const sprintBreakdown = buildSprintBreakdown({
     fee: engagementFee,
     totalHours,
@@ -571,7 +584,7 @@ export function calculateEstimate(input: CalculateInput): CalculateResult {
     sprintPlan: input.sprintPlan,
     sprintCount,
     sprintWeeks,
-    warrantyMonths,
+    warrantyPeriodDays,
   });
 
   const engagementFeeSource =
@@ -631,7 +644,7 @@ export function calculateEstimate(input: CalculateInput): CalculateResult {
     sprintCount,
     sprintWeeks,
     sprintFormula: sprintMeta.formula,
-    warrantyMonths,
+    warrantyPeriodDays,
     engagementFeeSource,
   };
 }

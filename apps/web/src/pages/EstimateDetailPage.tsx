@@ -186,7 +186,7 @@ export function EstimateDetailPage() {
             <div>
               <div className="text-xs text-[var(--color-muted)]">Warranty Period</div>
               <div className="font-medium">
-                {estimate.warrantyMonths ?? calc?.warrantyMonths ?? 3} months
+                {estimate.warrantyPeriodDays ?? calc?.warrantyPeriodDays ?? 0} days
               </div>
             </div>
           </div>
@@ -248,8 +248,10 @@ export function EstimateDetailPage() {
                   <th className="px-4 py-2">Department</th>
                   <th className="px-4 py-2">Hours</th>
                   <th className="px-4 py-2">% Hours</th>
-                  <th className="px-4 py-2">Total Cost</th>
+                  <th className="px-4 py-2">Rate Cost</th>
+                  <th className="px-4 py-2">Rate Bill</th>
                   <th className="px-4 py-2">Total Revenue</th>
+                  <th className="px-4 py-2">Total Cost</th>
                 </tr>
               </thead>
               <tbody>
@@ -258,12 +260,50 @@ export function EstimateDetailPage() {
                     <td className="px-4 py-2 font-medium">{d.department}</td>
                     <td className="px-4 py-2">{d.hours}</td>
                     <td className="px-4 py-2">{pct(d.pctOfHours)}</td>
-                    <td className="px-4 py-2">{money(d.totalCost)}</td>
+                    <td className="px-4 py-2">${Number(d.hourlyCost).toFixed(2)}</td>
+                    <td className="px-4 py-2">${Number(d.hourlyBilling).toFixed(2)}</td>
                     <td className="px-4 py-2">{money(d.totalRevenue)}</td>
+                    <td className="px-4 py-2">{money(d.totalCost)}</td>
                   </tr>
                 ))}
+                <tr className="border-t border-[var(--color-line)] bg-[var(--color-canvas)] font-semibold">
+                  <td className="px-4 py-2">Total</td>
+                  <td className="px-4 py-2">{Number(calc.totalHours)}</td>
+                  <td className="px-4 py-2">100%</td>
+                  <td className="px-4 py-2">
+                    $
+                    {(Number(calc.totalHours) > 0
+                      ? Number(calc.labourCost) / Number(calc.totalHours)
+                      : 0
+                    ).toFixed(2)}
+                  </td>
+                  <td className="px-4 py-2">
+                    $
+                    {(Number(calc.totalHours) > 0
+                      ? Number(calc.labourRevenue) / Number(calc.totalHours)
+                      : 0
+                    ).toFixed(2)}
+                  </td>
+                  <td className="px-4 py-2">{money(calc.labourRevenue)}</td>
+                  <td className="px-4 py-2">{money(calc.labourCost)}</td>
+                </tr>
               </tbody>
             </table>
+            <div className="px-4 py-3 border-t border-[var(--color-line)] grid sm:grid-cols-2 gap-2 text-sm">
+              <div>
+                Commission <span className="font-semibold">{money(calc.salesCommission)}</span>
+              </div>
+              <div>
+                COGS <span className="font-semibold">{money(calc.cogs)}</span>
+              </div>
+              <div>
+                API Rate <span className="font-semibold">${Number(calc.apiRate).toFixed(0)}/hr</span>
+              </div>
+              <div>
+                Market Rate{' '}
+                <span className="font-semibold">${Number(calc.marketRate).toFixed(0)}/hr</span>
+              </div>
+            </div>
           </div>
         </>
       )}

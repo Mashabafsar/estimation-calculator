@@ -223,12 +223,19 @@ export function parseHoursBreakdownBuffer(buffer: Buffer): {
   const withHours = departments.filter((d) => d.hours > 0);
   const totalHours = departments.reduce((s, d) => s + d.hours, 0);
 
+  // Keep every department column from the sheet (including 0h) so uploads
+  // with 6+ departments are not truncated to only non-zero ones.
   return {
     projectTitle,
     sheetName,
-    departments: withHours.length ? withHours : departments,
+    departments,
     totalHours: Math.round(totalHours * 100) / 100,
-    warnings,
+    warnings: [
+      ...warnings,
+      ...(withHours.length < departments.length
+        ? [`Included ${departments.length - withHours.length} department(s) with 0 hours`]
+        : []),
+    ],
   };
 }
 

@@ -85,9 +85,10 @@ interface CalcResult {
   sprintCount: number;
   sprintWeeks: number;
   sprintFormula?: string;
-  warrantyMonths?: number;
+  warrantyPeriodDays?: number;
   engagementFeeSource?: 'negotiated_price' | 'labour_revenue';
   targetMarginPct?: number;
+  targetMarginAmount?: number;
 }
 
 type FormValues = {
@@ -97,7 +98,7 @@ type FormValues = {
   templateId: string;
   complexity: string;
   negotiatedPrice: number | '';
-  warrantyMonths: number;
+  warrantyPeriodDays: number;
   resources: Array<{
     roleId: string;
     roleName: string;
@@ -114,6 +115,8 @@ type FormValues = {
   }>;
 };
 
+type PaymentPlanRow = { name: string; percentage: number };
+
 export function EstimateFormPage() {
   const { token } = useAuth();
   const navigate = useNavigate();
@@ -126,6 +129,8 @@ export function EstimateFormPage() {
   const [expandedSprint, setExpandedSprint] = useState<number | null>(null);
   const [uploadMsg, setUploadMsg] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [paymentPlan, setPaymentPlan] = useState<PaymentPlanRow[]>([]);
+  const [planDirty, setPlanDirty] = useState(false);
 
   const { register, control, watch, setValue, handleSubmit, getValues } = useForm<FormValues>({
     defaultValues: {
@@ -135,7 +140,7 @@ export function EstimateFormPage() {
       templateId: '',
       complexity: 'MEDIUM',
       negotiatedPrice: '',
-      warrantyMonths: 3,
+      warrantyPeriodDays: 0,
       resources: [],
       expenses: [],
     },
@@ -145,7 +150,17 @@ export function EstimateFormPage() {
   const expenses = useFieldArray({ control, name: 'expenses' });
   const templateId = watch('templateId');
   const negotiatedPrice = watch('negotiatedPrice');
-  const warrantyMonths = watch('warrantyMonths');
+  const warrantyPeriodDays = watch('warrantyPeriodDays');
+
+  useEffect(() => {
+    setPlanDirty(false);
+  }, [warrantyPeriodDays]);
+
+  useEffect(() => {
+    if (!calc?.sprintBreakdown?.length) return;
+    if (planDirty && paymentPlan.length) return;
+    setPaymentPlan(calc.sprintBreakdown.map((s) => ({ name: s.name, percentage: s.percentage })));
+  }, [calc]);
 
   useEffect(() => {
     Promise.all([
@@ -224,13 +239,12 @@ export function EstimateFormPage() {
         setValue('projectName', title);
       }
 
-      const mapped = parsed.departments
-        .filter((d) => d.hours > 0)
-        .map((d) => {
+      const mapped = parsed.departments.map((d) => {
           const role =
             roles.find((r) => r.id === d.roleId) ||
             roles.find((r) => r.name === d.roleName) ||
-            roles.find((r) => r.name.toLowerCase().includes(d.name.toLowerCase()));
+            roles.find((r) => r.name.toLowerCase().includes(d.name.toLowerCase())) ||
+            roles.find((r) => d.name.toLowerCase().includes(r.name.toLowerCase().split(' ')[0]));
           return {
             roleId: role?.id || d.roleId || roles[0]?.id || '',
             roleName: role?.name || d.roleName || d.name,
@@ -242,11 +256,13 @@ export function EstimateFormPage() {
         });
 
       if (!mapped.length) {
-        setUploadMsg('No department hours found in the file.');
+        setUploadMsg('No department columns found in the file.');
         return;
       }
 
       resources.replace(mapped);
+      setPlanDirty(false);
+      setPaymentPlan([]);
       setUploadMsg(
         `Loaded ${mapped.length} departments · ${parsed.totalHours}h` +
           (parsed.warnings?.length ? ` · ${parsed.warnings.join('; ')}` : ''),
@@ -259,24 +275,37 @@ export function EstimateFormPage() {
     }
   }
 
+  function buildPayload(values: FormValues) {
+    const days = Number(values.warrantyPeriodDays);
+    return {
+      ...values,
+      negotiatedPrice: values.negotiatedPrice === '' ? null : Number(values.negotiatedPrice),
+      warrantyPeriodDays: Number.isFinite(days) ? days : 0,
+      clientId: values.clientId || undefined,
+      templateId: values.templateId || undefined,
+      sprintPaymentPlan:
+        planDirty && paymentPlan.length
+          ? paymentPlan.map((p) => ({
+              name: p.name,
+              percentage: Number(p.percentage) || 0,
+            }))
+          : undefined,
+    };
+  }
+
   async function preview() {
     setCalculating(true);
     try {
-      const values = getValues();
-      const warrantyMonths = Number(values.warrantyMonths);
-      const payload = {
-        ...values,
-        negotiatedPrice: values.negotiatedPrice === '' ? null : Number(values.negotiatedPrice),
-        warrantyMonths: Number.isFinite(warrantyMonths) ? warrantyMonths : 3,
-        clientId: values.clientId || undefined,
-        templateId: values.templateId || undefined,
-      };
+      const payload = buildPayload(getValues());
       const result = await api<CalcResult>('/estimates/preview', {
         method: 'POST',
         token,
         body: JSON.stringify(payload),
       });
       setCalc(result);
+      if (!planDirty) {
+        setPaymentPlan(result.sprintBreakdown.map((s) => ({ name: s.name, percentage: s.percentage })));
+      }
     } finally {
       setCalculating(false);
     }
@@ -285,24 +314,48 @@ export function EstimateFormPage() {
   async function onSubmit(values: FormValues) {
     setSaving(true);
     try {
-      const warrantyMonths = Number(values.warrantyMonths);
-      const payload = {
-        ...values,
-        negotiatedPrice: values.negotiatedPrice === '' ? null : Number(values.negotiatedPrice),
-        warrantyMonths: Number.isFinite(warrantyMonths) ? warrantyMonths : 3,
-        clientId: values.clientId || undefined,
-        templateId: values.templateId || undefined,
-      };
       const estimate = await api<{ id: string }>('/estimates', {
         method: 'POST',
         token,
-        body: JSON.stringify(payload),
+        body: JSON.stringify(buildPayload(values)),
       });
       navigate(`/estimates/${estimate.id}`);
     } finally {
       setSaving(false);
     }
   }
+
+  function updatePaymentPct(index: number, displayPct: string) {
+    const n = Number(displayPct);
+    setPlanDirty(true);
+    setPaymentPlan((prev) =>
+      prev.map((row, i) =>
+        i === index
+          ? { ...row, percentage: Number.isFinite(n) ? Math.max(0, n) / 100 : 0 }
+          : row,
+      ),
+    );
+  }
+
+  const paymentTotalPct = useMemo(
+    () => paymentPlan.reduce((s, p) => s + (Number(p.percentage) || 0), 0),
+    [paymentPlan],
+  );
+
+  const paymentRows = useMemo(() => {
+    if (!calc) return [];
+    return paymentPlan.map((p, order) => ({
+      name: p.name,
+      order,
+      percentage: p.percentage,
+      amount: Math.round(calc.engagementFee * p.percentage * 100) / 100,
+      hours: Math.round(calc.totalHours * p.percentage * 100) / 100,
+      departmentHours: calc.sprintBreakdown[order]?.departmentHours ?? [],
+    }));
+  }, [calc, paymentPlan]);
+
+  const avgRateCost = calc && calc.totalHours > 0 ? calc.labourCost / calc.totalHours : 0;
+  const avgRateBill = calc && calc.totalHours > 0 ? calc.labourRevenue / calc.totalHours : 0;
 
   const healthColor = useMemo(() => {
     if (!calc) return '';
@@ -415,19 +468,21 @@ export function EstimateFormPage() {
               </span>
             </label>
             <label className="text-sm space-y-1">
-              <span className="font-medium">Warranty Period (months)</span>
+              <span className="font-medium">Warranty Period (days)</span>
               <input
                 className="input"
                 type="number"
                 min={0}
-                max={24}
+                max={730}
                 step={1}
-                {...register('warrantyMonths', { valueAsNumber: true })}
+                {...register('warrantyPeriodDays', { valueAsNumber: true })}
               />
               <span className="text-[11px] text-[var(--color-muted)]">
-                {Number(warrantyMonths) || 0} month
-                {Number(warrantyMonths) === 1 ? '' : 's'} × 1% ={' '}
-                {((Number(warrantyMonths) || 0) * 1).toFixed(0)}% held in warranty payments
+                Default 0 · {Number(warrantyPeriodDays) || 0} days →{' '}
+                {Math.ceil((Number(warrantyPeriodDays) || 0) / 30) || 0} × 1% warranty hold
+                {Number(warrantyPeriodDays) > 0
+                  ? ` (${(Math.ceil((Number(warrantyPeriodDays) || 0) / 30) || 0).toFixed(0)}%)`
+                  : ''}
               </span>
             </label>
             <label className="text-sm space-y-1 sm:col-span-2">
@@ -658,10 +713,10 @@ export function EstimateFormPage() {
                       <th className="px-4 py-2">Department</th>
                       <th className="px-4 py-2">Hours</th>
                       <th className="px-4 py-2">% Hours</th>
-                      <th className="px-4 py-2">Avg Cost</th>
-                      <th className="px-4 py-2">Avg Bill</th>
-                      <th className="px-4 py-2">Total Cost</th>
+                      <th className="px-4 py-2">Rate Cost</th>
+                      <th className="px-4 py-2">Rate Bill</th>
                       <th className="px-4 py-2">Total Revenue</th>
+                      <th className="px-4 py-2">Total Cost</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -672,84 +727,37 @@ export function EstimateFormPage() {
                         <td className="px-4 py-2">{pct(d.pctOfHours)}</td>
                         <td className="px-4 py-2">${d.hourlyCost.toFixed(2)}</td>
                         <td className="px-4 py-2">${d.hourlyBilling.toFixed(2)}</td>
-                        <td className="px-4 py-2">{money(d.totalCost)}</td>
                         <td className="px-4 py-2">{money(d.totalRevenue)}</td>
+                        <td className="px-4 py-2">{money(d.totalCost)}</td>
                       </tr>
                     ))}
                     <tr className="border-t border-[var(--color-line)] bg-[var(--color-canvas)] font-semibold">
                       <td className="px-4 py-2">Total</td>
                       <td className="px-4 py-2">{calc.totalHours}</td>
                       <td className="px-4 py-2">100%</td>
-                      <td className="px-4 py-2" colSpan={2} />
-                      <td className="px-4 py-2">{money(calc.labourCost)}</td>
+                      <td className="px-4 py-2">${avgRateCost.toFixed(2)}</td>
+                      <td className="px-4 py-2">${avgRateBill.toFixed(2)}</td>
                       <td className="px-4 py-2">{money(calc.labourRevenue)}</td>
+                      <td className="px-4 py-2">{money(calc.labourCost)}</td>
                     </tr>
                   </tbody>
                 </table>
+                <div className="px-4 py-3 border-t border-[var(--color-line)] grid sm:grid-cols-2 gap-2 text-sm">
+                  <div>
+                    Commission <span className="font-semibold">{money(calc.salesCommission)}</span>
+                  </div>
+                  <div>
+                    COGS <span className="font-semibold">{money(calc.cogs)}</span>
+                  </div>
+                  <div>
+                    API Rate <span className="font-semibold">${calc.apiRate.toFixed(0)}/hr</span>
+                  </div>
+                  <div>
+                    Market Rate <span className="font-semibold">${calc.marketRate.toFixed(0)}/hr</span>
+                  </div>
+                </div>
               </div>
             </>
-          ) : null}
-
-          {calc?.sprintBreakdown?.length ? (
-            <div className="card overflow-hidden">
-              <div className="px-4 py-3 border-b border-[var(--color-line)]">
-                <div className="font-semibold">
-                  Sprint / Milestone Breakdown ({calc.sprintCount} sprints × {calc.sprintWeeks} weeks)
-                </div>
-                {calc.sprintFormula && (
-                  <div className="text-xs text-[var(--color-muted)] mt-1 font-mono">{calc.sprintFormula}</div>
-                )}
-              </div>
-              <table className="w-full text-sm">
-                <thead className="text-left text-[var(--color-muted)] bg-[var(--color-canvas)]">
-                  <tr>
-                    <th className="px-4 py-2">Milestone</th>
-                    <th className="px-4 py-2">%</th>
-                    <th className="px-4 py-2">Amount</th>
-                    <th className="px-4 py-2">Hours</th>
-                    <th className="px-4 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {calc.sprintBreakdown.map((s) => (
-                    <Fragment key={s.order}>
-                      <tr className="border-t border-[var(--color-line)]">
-                        <td className="px-4 py-2">{s.name}</td>
-                        <td className="px-4 py-2">{pct(s.percentage * 100)}</td>
-                        <td className="px-4 py-2">{money(s.amount)}</td>
-                        <td className="px-4 py-2">{s.hours}</td>
-                        <td className="px-4 py-2">
-                          <button
-                            type="button"
-                            className="text-xs text-[var(--color-accent)]"
-                            onClick={() =>
-                              setExpandedSprint(expandedSprint === s.order ? null : s.order)
-                            }
-                          >
-                            {expandedSprint === s.order ? 'Hide depts' : 'Depts'}
-                          </button>
-                        </td>
-                      </tr>
-                      {expandedSprint === s.order &&
-                        s.departmentHours
-                          .filter((d) => d.hours > 0)
-                          .map((d) => (
-                            <tr
-                              key={`${s.order}-${d.department}`}
-                              className="bg-[var(--color-canvas)] text-xs text-[var(--color-muted)]"
-                            >
-                              <td className="px-8 py-1">{d.department}</td>
-                              <td className="px-4 py-1" />
-                              <td className="px-4 py-1">{money(d.revenue)}</td>
-                              <td className="px-4 py-1">{d.hours}h</td>
-                              <td />
-                            </tr>
-                          ))}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           ) : null}
         </div>
 
@@ -773,31 +781,69 @@ export function EstimateFormPage() {
                   marginPct={calc.grossMarginPct}
                   className="mb-1"
                 />
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <div className="text-[var(--color-muted)] text-xs">Engagement Fee</div>
-                    <div className="font-semibold text-lg">{money(calc.engagementFee)}</div>
-                    <div className="text-[11px] text-[var(--color-muted)]">
-                      {calc.engagementFeeSource === 'negotiated_price'
-                        ? '= Negotiated Price'
-                        : '= Labour Revenue'}
+
+                <div className="rounded-lg border border-[var(--color-line)] overflow-hidden text-sm">
+                  <div className="bg-[var(--color-canvas)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
+                    Comparison
+                  </div>
+                  <div className="divide-y divide-[var(--color-line)]">
+                    <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center px-3 py-2">
+                      <div>
+                        <div className="text-[11px] text-[var(--color-muted)]">Engagement Fee</div>
+                        <div className="font-semibold">{money(calc.engagementFee)}</div>
+                      </div>
+                      <div className="text-[var(--color-muted)] text-xs">vs</div>
+                      <div className="text-right">
+                        <div className="text-[11px] text-[var(--color-muted)]">Recommended @ 50%</div>
+                        <div className="font-semibold">{money(calc.recommendedPrice)}</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center px-3 py-2">
+                      <div>
+                        <div className="text-[11px] text-[var(--color-muted)]">Current Margin</div>
+                        <div className={`font-semibold ${healthColor}`}>{pct(calc.grossMarginPct)}</div>
+                      </div>
+                      <div className="text-[var(--color-muted)] text-xs">vs</div>
+                      <div className="text-right">
+                        <div className="text-[11px] text-[var(--color-muted)]">Target Margin</div>
+                        <div className="font-semibold">50%</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center px-3 py-2">
+                      <div>
+                        <div className="text-[11px] text-[var(--color-muted)]">Labour Revenue</div>
+                        <div className="font-semibold">{money(calc.labourRevenue)}</div>
+                      </div>
+                      <div className="text-[var(--color-muted)] text-xs">vs</div>
+                      <div className="text-right">
+                        <div className="text-[11px] text-[var(--color-muted)]">Labour Cost</div>
+                        <div className="font-semibold">{money(calc.labourCost)}</div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center px-3 py-2">
+                      <div>
+                        <div className="text-[11px] text-[var(--color-muted)]">Fee − Direct Costs</div>
+                        <div className={`font-semibold ${healthColor}`}>{money(calc.directMargin)}</div>
+                      </div>
+                      <div className="text-[var(--color-muted)] text-xs">vs</div>
+                      <div className="text-right">
+                        <div className="text-[11px] text-[var(--color-muted)]">Target Profit $</div>
+                        <div className="font-semibold">
+                          {money(calc.targetMarginAmount ?? calc.engagementFee * 0.5)}
+                        </div>
+                      </div>
                     </div>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <div className="text-[var(--color-muted)] text-xs">Direct Costs</div>
                     <div className="font-semibold text-lg">{money(calc.directCosts)}</div>
                   </div>
                   <div>
-                    <div className="text-[var(--color-muted)] text-xs">Direct Margin</div>
-                    <div className={`font-semibold text-lg ${healthColor}`}>
-                      {money(calc.directMargin)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[var(--color-muted)] text-xs">Margin % (target 50%)</div>
-                    <div className={`font-semibold text-lg ${healthColor}`}>
-                      {pct(calc.grossMarginPct)}
-                    </div>
+                    <div className="text-[var(--color-muted)] text-xs">Excess / Deficit</div>
+                    <div className="font-semibold text-lg">{money(calc.excessDeficit)}</div>
                   </div>
                   <div>
                     <div className="text-[var(--color-muted)] text-xs">Total Hours</div>
@@ -809,27 +855,10 @@ export function EstimateFormPage() {
                       {calc.sprintCount} × {calc.sprintWeeks}w
                     </div>
                   </div>
-                  <div>
-                    <div className="text-[var(--color-muted)] text-xs">Recommended Price</div>
-                    <div className="font-semibold">{money(calc.recommendedPrice)}</div>
-                    <div className="text-[11px] text-[var(--color-muted)]">at 50% target margin</div>
-                  </div>
-                  <div>
-                    <div className="text-[var(--color-muted)] text-xs">Excess / Deficit</div>
-                    <div className="font-semibold">{money(calc.excessDeficit)}</div>
-                  </div>
                 </div>
-                <div className="text-xs text-[var(--color-muted)] space-y-1 border-t border-[var(--color-line)] pt-3">
-                  <div>
-                    Labour Rev {money(calc.labourRevenue)} · Cost {money(calc.labourCost)}
-                  </div>
-                  <div>
-                    Commission {money(calc.salesCommission)} · COGS {money(calc.cogs)}
-                  </div>
-                  <div>
-                    API Rate ${calc.apiRate.toFixed(0)}/hr · Market ${calc.marketRate.toFixed(0)}/hr
-                  </div>
-                  <div>Payment Terms: {calc.paymentTerms ?? '—'}</div>
+                <div className="text-xs text-[var(--color-muted)] border-t border-[var(--color-line)] pt-3">
+                  Payment Terms: {calc.paymentTerms ?? '—'} · Fee source:{' '}
+                  {calc.engagementFeeSource === 'negotiated_price' ? 'Negotiated Price' : 'Labour Revenue'}
                 </div>
                 <div className="space-y-2">
                   {calc.recommendations.map((r, i) => (
@@ -843,6 +872,104 @@ export function EstimateFormPage() {
           </div>
         </div>
       </div>
+
+      {calc && paymentRows.length > 0 && !calculating ? (
+        <div className="card overflow-hidden">
+          <div className="px-4 py-3 border-b border-[var(--color-line)] flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <div className="font-semibold">
+                Sprint / Milestone Breakdown ({calc.sprintCount} sprints × {calc.sprintWeeks} weeks)
+              </div>
+              {calc.sprintFormula && (
+                <div className="text-xs text-[var(--color-muted)] mt-1 font-mono">{calc.sprintFormula}</div>
+              )}
+              <div className="text-xs text-[var(--color-muted)] mt-1">
+                Edit payment % below. Amounts update live. Click Calculate again to persist edits in the engine.
+              </div>
+            </div>
+            <div
+              className={`text-sm font-semibold ${
+                Math.abs(paymentTotalPct - 1) < 0.001
+                  ? 'text-emerald-600'
+                  : 'text-amber-600'
+              }`}
+            >
+              Total {pct(paymentTotalPct * 100)}
+              {Math.abs(paymentTotalPct - 1) >= 0.001 ? ' (should be 100%)' : ''}
+            </div>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="text-left text-[var(--color-muted)] bg-[var(--color-canvas)]">
+              <tr>
+                <th className="px-4 py-2">Milestone</th>
+                <th className="px-4 py-2 w-28">%</th>
+                <th className="px-4 py-2">Amount</th>
+                <th className="px-4 py-2">Hours</th>
+                <th className="px-4 py-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {paymentRows.map((s) => (
+                <Fragment key={s.order}>
+                  <tr className="border-t border-[var(--color-line)]">
+                    <td className="px-4 py-2">{s.name}</td>
+                    <td className="px-4 py-2">
+                      <input
+                        className="input py-1"
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.01}
+                        value={Number((s.percentage * 100).toFixed(4))}
+                        onChange={(e) => updatePaymentPct(s.order, e.target.value)}
+                      />
+                    </td>
+                    <td className="px-4 py-2">{money(s.amount)}</td>
+                    <td className="px-4 py-2">{s.hours}</td>
+                    <td className="px-4 py-2">
+                      <button
+                        type="button"
+                        className="text-xs text-[var(--color-accent)]"
+                        onClick={() =>
+                          setExpandedSprint(expandedSprint === s.order ? null : s.order)
+                        }
+                      >
+                        {expandedSprint === s.order ? 'Hide depts' : 'Depts'}
+                      </button>
+                    </td>
+                  </tr>
+                  {expandedSprint === s.order &&
+                    s.departmentHours
+                      .filter((d) => d.hours > 0)
+                      .map((d) => (
+                        <tr
+                          key={`${s.order}-${d.department}`}
+                          className="bg-[var(--color-canvas)] text-xs text-[var(--color-muted)]"
+                        >
+                          <td className="px-8 py-1">{d.department}</td>
+                          <td className="px-4 py-1" />
+                          <td className="px-4 py-1">{money(d.revenue)}</td>
+                          <td className="px-4 py-1">{d.hours}h</td>
+                          <td />
+                        </tr>
+                      ))}
+                </Fragment>
+              ))}
+              <tr className="border-t border-[var(--color-line)] bg-[var(--color-canvas)] font-semibold">
+                <td className="px-4 py-2">Total</td>
+                <td className="px-4 py-2">{pct(paymentTotalPct * 100)}</td>
+                <td className="px-4 py-2">
+                  {money(paymentRows.reduce((s, r) => s + r.amount, 0))}
+                </td>
+                <td className="px-4 py-2">
+                  {Math.round(paymentRows.reduce((s, r) => s + r.hours, 0) * 100) / 100}
+                </td>
+                <td />
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </form>
   );
 }

@@ -41,7 +41,7 @@ export interface EstimatePayload {
   negotiatedPrice?: number | null;
   sprintCount?: number | null;
   sprintWeeks?: number | null;
-  warrantyMonths?: number | null;
+  warrantyPeriodDays?: number | null;
   sprintPaymentPlan?: Array<{ name: string; percentage: number }> | null;
   resources: ResourceInput[];
   expenses: ExpenseInput[];
@@ -71,7 +71,7 @@ async function runCalculation(payload: {
   expectedDelivery?: Date | null;
   sprintCount?: number | null;
   sprintWeeks?: number | null;
-  warrantyMonths?: number | null;
+  warrantyPeriodDays?: number | null;
   sprintPaymentPlan?: Array<{ name: string; percentage: number }> | null;
 }) {
   let commissionRate: number | undefined;
@@ -126,7 +126,7 @@ async function runCalculation(payload: {
     paymentTerms,
     projectDurationDays,
     sprintPlan,
-    warrantyMonths: payload.warrantyMonths,
+    warrantyPeriodDays: payload.warrantyPeriodDays,
   });
 }
 
@@ -240,7 +240,7 @@ export async function previewCalculation(payload: EstimatePayload) {
     templateId: payload.templateId,
     startDate: payload.startDate ? new Date(payload.startDate) : null,
     expectedDelivery: payload.expectedDelivery ? new Date(payload.expectedDelivery) : null,
-    warrantyMonths: payload.warrantyMonths,
+    warrantyPeriodDays: payload.warrantyPeriodDays,
     sprintPaymentPlan: payload.sprintPaymentPlan,
   });
 }
@@ -256,7 +256,7 @@ export async function createEstimate(userId: string, payload: EstimatePayload) {
     templateId: payload.templateId,
     startDate,
     expectedDelivery,
-    warrantyMonths: payload.warrantyMonths,
+    warrantyPeriodDays: payload.warrantyPeriodDays,
     sprintPaymentPlan: payload.sprintPaymentPlan,
   });
 
@@ -278,7 +278,7 @@ export async function createEstimate(userId: string, payload: EstimatePayload) {
       discountPct: decimal(calc.discountPct),
       sprintCount: calc.sprintCount,
       sprintWeeks: calc.sprintWeeks,
-      warrantyMonths: calc.warrantyMonths,
+      warrantyPeriodDays: calc.warrantyPeriodDays,
       sprintPaymentPlan: (payload.sprintPaymentPlan as any) ?? undefined,
       createdById: userId,
       resources: {
@@ -334,7 +334,7 @@ export async function updateEstimate(id: string, userId: string, payload: Estima
     templateId: payload.templateId,
     startDate,
     expectedDelivery,
-    warrantyMonths: payload.warrantyMonths,
+    warrantyPeriodDays: payload.warrantyPeriodDays,
     sprintPaymentPlan: payload.sprintPaymentPlan,
   });
 
@@ -363,7 +363,7 @@ export async function updateEstimate(id: string, userId: string, payload: Estima
         discountPct: decimal(calc.discountPct),
         sprintCount: calc.sprintCount,
         sprintWeeks: calc.sprintWeeks,
-        warrantyMonths: calc.warrantyMonths,
+        warrantyPeriodDays: calc.warrantyPeriodDays,
         sprintPaymentPlan: (payload.sprintPaymentPlan as any) ?? undefined,
         currentVersion: nextVersion,
         resources: {
