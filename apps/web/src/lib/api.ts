@@ -23,14 +23,18 @@ export async function api<T>(
   });
 
   const contentType = res.headers.get('content-type') || '';
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new ApiError(json.message || 'Request failed', res.status);
+  }
+  if (contentType.includes('application/pdf')) {
+    return (await res.blob()) as T;
+  }
   if (contentType.includes('text/csv')) {
     return (await res.text()) as T;
   }
 
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new ApiError(json.message || 'Request failed', res.status);
-  }
   return (json.data ?? json) as T;
 }
 

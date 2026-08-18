@@ -13,8 +13,8 @@ import {
 } from 'recharts';
 import { api, money, pct } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { MarginHealthBox } from '../components/MarginHealth';
 import { ButtonLoader } from '../components/Loader';
+import { EstimateFinancialResults } from '../components/EstimateFinancialResults';
 
 interface Role {
   id: string;
@@ -356,13 +356,6 @@ export function EstimateFormPage() {
 
   const avgRateCost = calc && calc.totalHours > 0 ? calc.labourCost / calc.totalHours : 0;
   const avgRateBill = calc && calc.totalHours > 0 ? calc.labourRevenue / calc.totalHours : 0;
-
-  const healthColor = useMemo(() => {
-    if (!calc) return '';
-    if (calc.marginHealth === 'GREEN') return 'text-emerald-600';
-    if (calc.marginHealth === 'YELLOW') return 'text-amber-600';
-    return 'text-rose-600';
-  }, [calc]);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
@@ -762,114 +755,23 @@ export function EstimateFormPage() {
         </div>
 
         <div className="space-y-4">
-          <div className="card p-4 space-y-3 sticky top-4">
-            <h2 className="font-semibold">Financial Results</h2>
-            {calculating && (
+          {calculating && (
+            <div className="card p-4 space-y-3 sticky top-4">
+              <h2 className="font-semibold">Financial Results</h2>
               <div className="flex items-center gap-2 text-sm text-[var(--color-muted)]">
                 <ButtonLoader label="Calculating…" />
               </div>
-            )}
-            {!calc && !calculating && (
+            </div>
+          )}
+          {!calc && !calculating && (
+            <div className="card p-4 space-y-3 sticky top-4">
+              <h2 className="font-semibold">Financial Results</h2>
               <p className="text-sm text-[var(--color-muted)]">
                 Click Calculate to run the backend engine against current inputs.
               </p>
-            )}
-            {calc && !calculating && (
-              <>
-                <MarginHealthBox
-                  health={calc.marginHealth}
-                  marginPct={calc.grossMarginPct}
-                  className="mb-1"
-                />
-
-                <div className="rounded-lg border border-[var(--color-line)] overflow-hidden text-sm">
-                  <div className="bg-[var(--color-canvas)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-                    Comparison
-                  </div>
-                  <div className="divide-y divide-[var(--color-line)]">
-                    <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center px-3 py-2">
-                      <div>
-                        <div className="text-[11px] text-[var(--color-muted)]">Engagement Fee</div>
-                        <div className="font-semibold">{money(calc.engagementFee)}</div>
-                      </div>
-                      <div className="text-[var(--color-muted)] text-xs">vs</div>
-                      <div className="text-right">
-                        <div className="text-[11px] text-[var(--color-muted)]">Recommended @ 50%</div>
-                        <div className="font-semibold">{money(calc.recommendedPrice)}</div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center px-3 py-2">
-                      <div>
-                        <div className="text-[11px] text-[var(--color-muted)]">Current Margin</div>
-                        <div className={`font-semibold ${healthColor}`}>{pct(calc.grossMarginPct)}</div>
-                      </div>
-                      <div className="text-[var(--color-muted)] text-xs">vs</div>
-                      <div className="text-right">
-                        <div className="text-[11px] text-[var(--color-muted)]">Target Margin</div>
-                        <div className="font-semibold">50%</div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center px-3 py-2">
-                      <div>
-                        <div className="text-[11px] text-[var(--color-muted)]">Labour Revenue</div>
-                        <div className="font-semibold">{money(calc.labourRevenue)}</div>
-                      </div>
-                      <div className="text-[var(--color-muted)] text-xs">vs</div>
-                      <div className="text-right">
-                        <div className="text-[11px] text-[var(--color-muted)]">Labour Cost</div>
-                        <div className="font-semibold">{money(calc.labourCost)}</div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center px-3 py-2">
-                      <div>
-                        <div className="text-[11px] text-[var(--color-muted)]">Fee − Direct Costs</div>
-                        <div className={`font-semibold ${healthColor}`}>{money(calc.directMargin)}</div>
-                      </div>
-                      <div className="text-[var(--color-muted)] text-xs">vs</div>
-                      <div className="text-right">
-                        <div className="text-[11px] text-[var(--color-muted)]">Target Profit $</div>
-                        <div className="font-semibold">
-                          {money(calc.targetMarginAmount ?? calc.engagementFee * 0.5)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <div className="text-[var(--color-muted)] text-xs">Direct Costs</div>
-                    <div className="font-semibold text-lg">{money(calc.directCosts)}</div>
-                  </div>
-                  <div>
-                    <div className="text-[var(--color-muted)] text-xs">Excess / Deficit</div>
-                    <div className="font-semibold text-lg">{money(calc.excessDeficit)}</div>
-                  </div>
-                  <div>
-                    <div className="text-[var(--color-muted)] text-xs">Total Hours</div>
-                    <div className="font-semibold">{calc.totalHours}</div>
-                  </div>
-                  <div>
-                    <div className="text-[var(--color-muted)] text-xs">Auto Sprints</div>
-                    <div className="font-semibold">
-                      {calc.sprintCount} × {calc.sprintWeeks}w
-                    </div>
-                  </div>
-                </div>
-                <div className="text-xs text-[var(--color-muted)] border-t border-[var(--color-line)] pt-3">
-                  Payment Terms: {calc.paymentTerms ?? '—'} · Fee source:{' '}
-                  {calc.engagementFeeSource === 'negotiated_price' ? 'Negotiated Price' : 'Labour Revenue'}
-                </div>
-                <div className="space-y-2">
-                  {calc.recommendations.map((r, i) => (
-                    <div key={i} className="rounded-lg bg-[var(--color-canvas)] px-3 py-2 text-xs">
-                      {r.message}
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+            </div>
+          )}
+          {calc && !calculating && <EstimateFinancialResults calc={calc} sticky />}
         </div>
       </div>
 

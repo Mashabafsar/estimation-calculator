@@ -492,8 +492,16 @@ router.get(
   '/estimates/:id/export',
   authenticate,
   asyncHandler(async (req, res) => {
-    const format = (req.query.format as 'json' | 'csv') || 'json';
+    const format = (req.query.format as 'json' | 'csv' | 'pdf') || 'json';
     const data = await estimatesService.exportEstimate(req.params.id, format);
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="estimate-${req.params.id}.pdf"`,
+      );
+      return res.send(data);
+    }
     if (format === 'csv') {
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename="estimate-${req.params.id}.csv"`);

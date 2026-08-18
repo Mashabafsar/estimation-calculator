@@ -181,6 +181,11 @@ function calcCreateData(estimateId: string, calc: Awaited<ReturnType<typeof runC
     rawBreakdown: {
       resources: calc.resourceBreakdown,
       expenses: calc.expenseBreakdown,
+      sprintCount: calc.sprintCount,
+      sprintWeeks: calc.sprintWeeks,
+      sprintFormula: calc.sprintFormula,
+      warrantyPeriodDays: calc.warrantyPeriodDays,
+      engagementFeeSource: calc.engagementFeeSource,
     } as any,
     departmentTotals: calc.departmentTotals as any,
     sprintBreakdown: calc.sprintBreakdown as any,
@@ -548,8 +553,12 @@ export async function addScenario(
   });
 }
 
-export async function exportEstimate(id: string, format: 'json' | 'csv') {
+export async function exportEstimate(id: string, format: 'json' | 'csv' | 'pdf') {
   const estimate = await getEstimate(id);
+  if (format === 'pdf') {
+    const { buildEstimatePdf } = await import('./estimatePdf.service.js');
+    return buildEstimatePdf(estimate);
+  }
   if (format === 'json') return estimate;
 
   const calc = estimate.calculation;
