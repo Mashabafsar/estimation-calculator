@@ -40,7 +40,7 @@ interface DashboardData {
   };
 }
 
-const COLORS = ['#0f766e', '#0ea5e9', '#f59e0b', '#e11d48', '#8b5cf6', '#64748b'];
+const COLORS = ['#4D71FB', '#24D5F6', '#8565FC', '#e11d48', '#f59e0b', '#6b7280'];
 
 function Kpi({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -92,8 +92,8 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-[var(--color-muted)]">Pipeline health, margins, and resource load.</p>
+        <h1 className="page-title">Dashboard</h1>
+        <p className="page-subtitle">Pipeline health, margins, and resource load.</p>
       </div>
 
       <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -131,7 +131,7 @@ export function DashboardPage() {
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
-              <Bar dataKey="revenue" fill="#0f766e" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="revenue" fill="#4D71FB" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -143,7 +143,7 @@ export function DashboardPage() {
               <XAxis dataKey="month" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip />
-              <Line type="monotone" dataKey="marginPct" stroke="#0ea5e9" strokeWidth={2} />
+              <Line type="monotone" dataKey="marginPct" stroke="#24D5F6" strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -199,8 +199,8 @@ export function DashboardPage() {
                 }
               />
               <Legend />
-              <Bar yAxisId="left" dataKey="hours" name="Hours" fill="#0284c7" radius={[6, 6, 0, 0]} />
-              <Bar yAxisId="right" dataKey="cost" name="Cost" fill="#0f766e" radius={[6, 6, 0, 0]} />
+              <Bar yAxisId="left" dataKey="hours" name="Hours" fill="#4D71FB" radius={[6, 6, 0, 0]} />
+              <Bar yAxisId="right" dataKey="cost" name="Cost" fill="#8565FC" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

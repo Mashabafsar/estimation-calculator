@@ -44,8 +44,8 @@ export function SettingsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Settings</h1>
-          <p className="text-sm text-[var(--color-muted)]">
+          <h1 className="page-title">Settings</h1>
+          <p className="page-subtitle">
             Everything configurable — margins, rates, capacity, and payment terms.
           </p>
         </div>

@@ -1,0 +1,24 @@
+<svg width="70" height="52" viewBox="0 0 70 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M35.115 42.342V0L2.96729 42.342H35.115Z" fill="url(#api_mark_g0)"/>
+  <path d="M37.7319 9.32422V51.6675L69.8809 9.32422H37.7319Z" fill="url(#api_mark_g1)"/>
+  <defs>
+    <linearGradient id="api_mark_g0" x1="-4.73444" y1="46.0292" x2="64.282" y2="3.90698" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7313FF"/>
+      <stop offset="0.1087" stop-color="#7019FF"/>
+      <stop offset="0.2591" stop-color="#692BFE"/>
+      <stop offset="0.4336" stop-color="#5D48FD"/>
+      <stop offset="0.6264" stop-color="#4D71FB"/>
+      <stop offset="0.8317" stop-color="#38A5F8"/>
+      <stop offset="1" stop-color="#24D5F6"/>
+    </linearGradient>
+    <linearGradient id="api_mark_g1" x1="-3.38249" y1="56.1435" x2="65.6339" y2="14.0213" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7313FF"/>
+      <stop offset="0.1087" stop-color="#7019FF"/>
+      <stop offset="0.2591" stop-color="#692BFE"/>
+      <stop offset="0.4336" stop-color="#5D48FD"/>
+      <stop offset="0.6264" stop-color="#4D71FB"/>
+      <stop offset="0.8317" stop-color="#38A5F8"/>
+      <stop offset="1" stop-color="#24D5F6"/>
+    </linearGradient>
+  </defs>
+</svg>

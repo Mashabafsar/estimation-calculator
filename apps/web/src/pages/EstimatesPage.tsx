@@ -87,8 +87,8 @@ export function EstimatesPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Estimates</h1>
-          <p className="text-sm text-[var(--color-muted)]">
+          <h1 className="page-title">Estimates</h1>
+          <p className="page-subtitle">
             {clientId
               ? 'Filtered by client — create, review, and approve project estimates.'
               : 'Create, review, and approve project estimates.'}

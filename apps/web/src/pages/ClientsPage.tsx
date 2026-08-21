@@ -45,8 +45,8 @@ export function ClientsPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold">Clients</h1>
-        <p className="text-sm text-[var(--color-muted)]">
+        <h1 className="page-title">Clients</h1>
+        <p className="page-subtitle">
           Accounts, industries, and number of estimates per client.
         </p>
       </div>

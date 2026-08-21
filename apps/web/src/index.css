@@ -2,22 +2,30 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+  Agency Partner Interactive — digital brand tokens
+  Bright Blue #4D71FB · Cyan #24D5F6 · Purple #8565FC · Black #1C1C1C · Grey #F6F6F6
+*/
 @theme {
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Onest", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
-  --color-canvas: #f4f6f8;
+  --color-canvas: #f6f6f6;
   --color-panel: #ffffff;
-  --color-ink: #0f172a;
-  --color-muted: #64748b;
-  --color-line: #e2e8f0;
-  --color-accent: #0f766e;
-  --color-accent-soft: #ccfbf1;
+  --color-ink: #1c1c1c;
+  --color-muted: #6b7280;
+  --color-line: #e8e8e8;
+  --color-accent: #4d71fb;
+  --color-accent-soft: #eef2ff;
+  --color-cyan: #24d5f6;
+  --color-purple: #8565fc;
   --color-warn: #b45309;
   --color-danger: #be123c;
   --color-ok: #047857;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
 }
 
@@ -31,23 +39,36 @@ body {
 
 .dark body,
 .dark {
-  --color-canvas: #0b1220;
-  --color-panel: #111827;
-  --color-ink: #e5e7eb;
-  --color-muted: #94a3b8;
-  --color-line: #1f2937;
-  --color-accent: #2dd4bf;
-  --color-accent-soft: #134e4a;
+  --color-canvas: #121212;
+  --color-panel: #1c1c1c;
+  --color-ink: #f6f6f6;
+  --color-muted: #9ca3af;
+  --color-line: #2a2a2a;
+  --color-accent: #4d71fb;
+  --color-accent-soft: #1e2550;
+  --color-cyan: #24d5f6;
+  --color-purple: #8565fc;
 }
 
 * {
   box-sizing: border-box;
 }
 
+.brand-gradient {
+  background-image: linear-gradient(135deg, #8565fc 0%, #4d71fb 48%, #24d5f6 100%);
+}
+
+.brand-gradient-text {
+  background-image: linear-gradient(135deg, #8565fc 0%, #4d71fb 48%, #24d5f6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
 .card {
   background: var(--color-panel);
   border: 1px solid var(--color-line);
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .input {
@@ -55,14 +76,17 @@ body {
   border: 1px solid var(--color-line);
   background: var(--color-panel);
   color: var(--color-ink);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 0.55rem 0.75rem;
   font-size: 0.9rem;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .input:focus {
-  outline: 2px solid color-mix(in oklab, var(--color-accent) 35%, transparent);
+  outline: none;
   border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 22%, transparent);
 }
 
 .btn {
@@ -70,17 +94,23 @@ body {
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  border-radius: 8px;
-  padding: 0.55rem 0.9rem;
+  border-radius: 10px;
+  padding: 0.55rem 0.95rem;
   font-size: 0.875rem;
   font-weight: 600;
+  font-family: inherit;
   border: 1px solid transparent;
   cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .btn:disabled {
   opacity: 0.65;
   cursor: not-allowed;
+}
+
+.btn:not(:disabled):active {
+  transform: translateY(1px);
 }
 
 @keyframes spin {
@@ -94,18 +124,26 @@ body {
 }
 
 .btn-primary {
-  background: var(--color-accent);
-  color: white;
+  background-image: linear-gradient(135deg, #8565fc 0%, #4d71fb 50%, #24d5f6 100%);
+  background-color: #4d71fb;
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 6px 18px color-mix(in oklab, #4d71fb 28%, transparent);
 }
 
-.dark .btn-primary {
-  color: #042f2e;
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.04);
 }
 
 .btn-ghost {
   background: transparent;
   border-color: var(--color-line);
   color: var(--color-ink);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--color-canvas);
+  border-color: color-mix(in oklab, var(--color-accent) 35%, var(--color-line));
 }
 
 .badge {
@@ -116,4 +154,17 @@ body {
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.02em;
+}
+
+.page-title {
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.page-subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--color-muted);
 }

@@ -8,10 +8,10 @@ import {
   LogOut,
   Moon,
   Sun,
-  Briefcase,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { BrandLogo } from '../components/BrandMark';
 import clsx from 'clsx';
 
 const nav = [
@@ -29,14 +29,12 @@ export function AppLayout() {
   return (
     <div className="min-h-full flex bg-[var(--color-canvas)] text-[var(--color-ink)]">
       <aside className="w-60 shrink-0 border-r border-[var(--color-line)] bg-[var(--color-panel)] flex flex-col">
-        <div className="px-5 py-5 border-b border-[var(--color-line)]">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-[var(--color-accent)] text-white dark:text-teal-950 grid place-items-center">
-              <Briefcase size={16} />
-            </div>
-            <div>
-              <div className="font-semibold tracking-tight">Estimation</div>
-              <div className="text-[11px] text-[var(--color-muted)]">Profitability OS</div>
+        <div className="px-4 py-5 border-b border-[var(--color-line)]">
+          <div className="flex items-center gap-2.5">
+            <BrandLogo variant="mark" height={34} />
+            <div className="min-w-0">
+              <div className="font-semibold tracking-tight leading-tight truncate">Estimation</div>
+              <div className="text-[11px] text-[var(--color-muted)] truncate">Agency Partner</div>
             </div>
           </div>
         </div>
@@ -48,7 +46,7 @@ export function AppLayout() {
               end={item.to === '/'}
               className={({ isActive }) =>
                 clsx(
-                  'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors',
                   isActive
                     ? 'bg-[var(--color-accent-soft)] text-[var(--color-accent)]'
                     : 'text-[var(--color-muted)] hover:bg-[var(--color-canvas)] hover:text-[var(--color-ink)]',

@@ -107,7 +107,7 @@ export function EstimateDetailPage() {
           <Link to="/estimates" className="text-sm text-[var(--color-muted)]">
             ← Estimates
           </Link>
-          <h1 className="text-2xl font-semibold mt-1">{estimate.projectName}</h1>
+          <h1 className="page-title mt-1">{estimate.projectName}</h1>
           <p className="text-sm text-[var(--color-muted)]">
             {estimate.estimateNumber} · {estimate.client?.name ?? 'No client'} · v{estimate.currentVersion}
           </p>
@@ -210,12 +210,12 @@ export function EstimateDetailPage() {
                       }
                     />
                     <Legend />
-                    <Bar yAxisId="left" dataKey="hours" name="Hours" fill="#0284c7" radius={[6, 6, 0, 0]} />
+                    <Bar yAxisId="left" dataKey="hours" name="Hours" fill="#4D71FB" radius={[6, 6, 0, 0]} />
                     <Bar
                       yAxisId="right"
                       dataKey="totalCost"
                       name="Cost"
-                      fill="#0f766e"
+                      fill="#8565FC"
                       radius={[6, 6, 0, 0]}
                     />
                   </BarChart>

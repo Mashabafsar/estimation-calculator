@@ -158,8 +158,8 @@ export function TemplatesPage() {
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Service Templates</h1>
-          <p className="text-sm text-[var(--color-muted)]">
+          <h1 className="page-title">Service Templates</h1>
+          <p className="page-subtitle">
             Configure default departments/resources, rates, sprints, and financial defaults.
           </p>
         </div>

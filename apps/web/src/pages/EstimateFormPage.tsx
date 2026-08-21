@@ -361,8 +361,8 @@ export function EstimateFormPage() {
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">New Estimate</h1>
-          <p className="text-sm text-[var(--color-muted)]">
+          <h1 className="page-title">New Estimate</h1>
+          <p className="page-subtitle">
             Upload a Hours Breakdown workbook or pick a template. Target margin defaults to 50%.
           </p>
         </div>
@@ -685,12 +685,12 @@ export function EstimateFormPage() {
                       }
                     />
                     <Legend />
-                    <Bar yAxisId="left" dataKey="hours" name="Hours" fill="#0284c7" radius={[4, 4, 0, 0]} />
+                    <Bar yAxisId="left" dataKey="hours" name="Hours" fill="#4D71FB" radius={[4, 4, 0, 0]} />
                     <Bar
                       yAxisId="right"
                       dataKey="totalCost"
                       name="Cost"
-                      fill="#0f766e"
+                      fill="#8565FC"
                       radius={[4, 4, 0, 0]}
                     />
                   </BarChart>
