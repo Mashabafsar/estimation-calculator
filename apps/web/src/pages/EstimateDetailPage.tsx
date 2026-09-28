@@ -118,6 +118,9 @@ export function EstimateDetailPage() {
               <Spinner /> {exporting ? 'Exporting…' : 'Processing…'}
             </span>
           )}
+          <Link to={`/estimates/${id}/edit`} className="btn btn-ghost">
+            Edit
+          </Link>
           <button className="btn btn-ghost" disabled={busy} onClick={() => transition('SUBMIT')}>
             Submit Review
           </button>
@@ -166,6 +169,7 @@ export function EstimateDetailPage() {
                   <th className="px-4 py-2">Role</th>
                   <th className="px-4 py-2">Loc</th>
                   <th className="px-4 py-2">Hrs</th>
+                  <th className="px-4 py-2">People</th>
                   <th className="px-4 py-2">Revenue</th>
                   <th className="px-4 py-2">Cost</th>
                 </tr>
@@ -176,6 +180,7 @@ export function EstimateDetailPage() {
                     <td className="px-4 py-2">{r.roleName}</td>
                     <td className="px-4 py-2">{r.location}</td>
                     <td className="px-4 py-2">{Number(r.hours)}</td>
+                    <td className="px-4 py-2">{Number(r.resourceCount ?? 1)}</td>
                     <td className="px-4 py-2">{money(r.totalRevenue)}</td>
                     <td className="px-4 py-2">{money(r.totalCost)}</td>
                   </tr>
@@ -231,6 +236,8 @@ export function EstimateDetailPage() {
                     <tr>
                       <th className="px-4 py-2">Department</th>
                       <th className="px-4 py-2">Hours</th>
+                      <th className="px-4 py-2">People</th>
+                      <th className="px-4 py-2">Effective</th>
                       <th className="px-4 py-2">% Hours</th>
                       <th className="px-4 py-2">Rate Cost</th>
                       <th className="px-4 py-2">Rate Bill</th>
@@ -243,6 +250,8 @@ export function EstimateDetailPage() {
                       <tr key={d.department} className="border-t border-[var(--color-line)]">
                         <td className="px-4 py-2 font-medium">{d.department}</td>
                         <td className="px-4 py-2">{d.hours}</td>
+                        <td className="px-4 py-2">{d.resourceCount ?? 1}</td>
+                        <td className="px-4 py-2">{d.effectiveHours ?? d.hours}</td>
                         <td className="px-4 py-2">{pct(d.pctOfHours)}</td>
                         <td className="px-4 py-2">${Number(d.hourlyCost).toFixed(2)}</td>
                         <td className="px-4 py-2">${Number(d.hourlyBilling).toFixed(2)}</td>
@@ -253,6 +262,7 @@ export function EstimateDetailPage() {
                     <tr className="border-t border-[var(--color-line)] bg-[var(--color-canvas)] font-semibold">
                       <td className="px-4 py-2">Total</td>
                       <td className="px-4 py-2">{Number(calc.totalHours)}</td>
+                      <td className="px-4 py-2" colSpan={2} />
                       <td className="px-4 py-2">100%</td>
                       <td className="px-4 py-2">
                         $

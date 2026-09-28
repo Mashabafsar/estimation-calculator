@@ -10,6 +10,8 @@ export interface CalcResourceInput {
   roleName: string;
   location: ResourceLocation;
   hours: number;
+  /** People assigned; used for sprint critical path. Default 1. */
+  resourceCount?: number;
   hourlyCost: number;
   hourlyBilling: number;
 }
@@ -75,6 +77,10 @@ export interface CalculateInput {
 export interface DepartmentTotal {
   department: string;
   hours: number;
+  /** People assigned to this department (summed across rows). */
+  resourceCount: number;
+  /** hours ÷ resourceCount — used for sprint critical path. */
+  effectiveHours: number;
   hourlyCost: number;
   hourlyBilling: number;
   totalCost: number;
@@ -201,11 +207,17 @@ function marginHealth(pct: number): MarginHealth {
   return 'RED';
 }
 
+export function normalizeResourceCount(value?: number | null): number {
+  if (value == null || Number.isNaN(Number(value))) return 1;
+  return Math.max(1, Math.min(100, Math.round(Number(value))));
+}
+
 /** Aggregate selected resources by department/role (Excel Hours Breakdown totals). */
 export function buildDepartmentTotals(
   resources: Array<{
     roleName: string;
     hours: number;
+    resourceCount?: number;
     hourlyCost: number;
     hourlyBilling: number;
     totalCost: number;
@@ -214,7 +226,14 @@ export function buildDepartmentTotals(
 ): DepartmentTotal[] {
   const map = new Map<
     string,
-    { hours: number; costWeighted: number; billWeighted: number; totalCost: number; totalRevenue: number }
+    {
+      hours: number;
+      resourceCount: number;
+      costWeighted: number;
+      billWeighted: number;
+      totalCost: number;
+      totalRevenue: number;
+    }
   >();
 
   for (const r of resources) {
@@ -222,12 +241,14 @@ export function buildDepartmentTotals(
     const key = r.roleName || 'Unassigned';
     const row = map.get(key) ?? {
       hours: 0,
+      resourceCount: 0,
       costWeighted: 0,
       billWeighted: 0,
       totalCost: 0,
       totalRevenue: 0,
     };
     row.hours += r.hours;
+    row.resourceCount += normalizeResourceCount(r.resourceCount);
     row.costWeighted += r.hourlyCost * r.hours;
     row.billWeighted += r.hourlyBilling * r.hours;
     row.totalCost += r.totalCost;
@@ -237,27 +258,34 @@ export function buildDepartmentTotals(
 
   const totalHours = [...map.values()].reduce((s, r) => s + r.hours, 0);
   return [...map.entries()]
-    .map(([department, r]) => ({
-      department,
-      hours: round2(r.hours),
-      hourlyCost: round4(safeDiv(r.costWeighted, r.hours)),
-      hourlyBilling: round4(safeDiv(r.billWeighted, r.hours)),
-      totalCost: round2(r.totalCost),
-      totalRevenue: round2(r.totalRevenue),
-      pctOfHours: round4(safeDiv(r.hours, totalHours) * 100),
-    }))
+    .map(([department, r]) => {
+      const resourceCount = Math.max(1, r.resourceCount);
+      return {
+        department,
+        hours: round2(r.hours),
+        resourceCount,
+        effectiveHours: round2(safeDiv(r.hours, resourceCount)),
+        hourlyCost: round4(safeDiv(r.costWeighted, r.hours)),
+        hourlyBilling: round4(safeDiv(r.billWeighted, r.hours)),
+        totalCost: round2(r.totalCost),
+        totalRevenue: round2(r.totalRevenue),
+        pctOfHours: round4(safeDiv(r.hours, totalHours) * 100),
+      };
+    })
     .sort((a, b) => b.hours - a.hours);
 }
 
 /**
  * Sprint count formula (fixed 2-week sprints):
  * personHoursPerSprint = workingHoursPerDay × 5 days × 2 weeks
- * sprintCount = ceil( max(departmentHours) / personHoursPerSprint )
+ * effectiveHours = departmentHours ÷ resourceCount
+ * sprintCount = ceil( max(effectiveHours) / personHoursPerSprint )
  *
- * Uses the heaviest department as critical path (teams work in parallel).
+ * Uses the heaviest department (after staffing) as critical path.
  * Minimum 1 sprint.
  */
 export const FIXED_SPRINT_WEEKS = 2;
+export const MAX_SPRINT_COUNT = 60;
 
 export function calculateSprintCount(
   departmentTotals: DepartmentTotal[],
@@ -266,12 +294,16 @@ export function calculateSprintCount(
 ): { sprintCount: number; sprintWeeks: number; formula: string; personHoursPerSprint: number } {
   const sprintWeeks = FIXED_SPRINT_WEEKS;
   const personHoursPerSprint = workingHoursPerDay * 5 * sprintWeeks; // e.g. 8×5×2 = 80
-  const maxDeptHours = departmentTotals.reduce((m, d) => Math.max(m, d.hours), 0);
-  const basisHours = maxDeptHours > 0 ? maxDeptHours : totalHours;
+  const maxEffective = departmentTotals.reduce((m, d) => Math.max(m, d.effectiveHours ?? d.hours), 0);
+  const critical = departmentTotals.reduce(
+    (best, d) => ((d.effectiveHours ?? d.hours) > (best?.effectiveHours ?? best?.hours ?? 0) ? d : best),
+    null as DepartmentTotal | null,
+  );
+  const basisHours = maxEffective > 0 ? maxEffective : totalHours;
   const sprintCount = Math.max(1, Math.ceil(basisHours / personHoursPerSprint));
   const formula =
-    maxDeptHours > 0
-      ? `ceil(maxDeptHours ${maxDeptHours} ÷ (${workingHoursPerDay}h × 5d × ${sprintWeeks}w = ${personHoursPerSprint}h)) = ${sprintCount}`
+    critical && maxEffective > 0
+      ? `ceil((${critical.department} ${critical.hours}h ÷ ${critical.resourceCount} people = ${critical.effectiveHours}h) ÷ (${workingHoursPerDay}h × 5d × ${sprintWeeks}w = ${personHoursPerSprint}h)) = ${sprintCount}`
       : `ceil(totalHours ${totalHours} ÷ ${personHoursPerSprint}h/sprint) = ${sprintCount}`;
   return { sprintCount, sprintWeeks, formula, personHoursPerSprint };
 }
@@ -298,7 +330,7 @@ export function defaultSprintPlan(
   sprintCount = 10,
   warrantyPeriodDays: number = DEFAULT_WARRANTY_PERIOD_DAYS,
 ): SprintMilestoneInput[] {
-  const n = Math.max(1, Math.min(sprintCount, 20));
+  const n = Math.max(1, Math.min(sprintCount, MAX_SPRINT_COUNT));
   const days = normalizeWarrantyPeriodDays(warrantyPeriodDays);
   const blocks = warrantyBlocksFromDays(days);
   const advance = ADVANCE_PAYMENT_PCT;
@@ -396,12 +428,14 @@ export function calculateEstimate(input: CalculateInput): CalculateResult {
 
   const resourceBreakdown = resources.map((r) => {
     const hours = Number(r.hours) || 0;
+    const resourceCount = normalizeResourceCount(r.resourceCount);
     const hourlyCost = Number(r.hourlyCost) || 0;
     const hourlyBilling = Number(r.hourlyBilling) || 0;
     return {
       roleName: r.roleName,
       location: r.location,
       hours,
+      resourceCount,
       hourlyCost,
       hourlyBilling,
       totalCost: round2(hours * hourlyCost),

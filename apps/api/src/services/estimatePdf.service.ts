@@ -83,35 +83,41 @@ export function buildEstimatePdf(estimate: AnyRec): Buffer {
 
   add('Department Hours Totals', { size: 13, bold: true, gap: 8 });
   add(
-    pad('Department', 22) +
-      pad('Hours', 10, true) +
-      pad('% Hours', 10, true) +
-      pad('Rate Cost', 12, true) +
-      pad('Rate Bill', 12, true) +
-      pad('Revenue', 14, true) +
-      pad('Cost', 12, true),
+    pad('Department', 18) +
+      pad('Hours', 8, true) +
+      pad('People', 8, true) +
+      pad('Eff.', 8, true) +
+      pad('% Hrs', 8, true) +
+      pad('Rate Cost', 11, true) +
+      pad('Rate Bill', 11, true) +
+      pad('Revenue', 12, true) +
+      pad('Cost', 10, true),
     { size: 8, bold: true, mono: true },
   );
   for (const d of depts) {
     add(
-      pad(String(d.department || ''), 22) +
-        pad(String(n(d.hours)), 10, true) +
-        pad(pct(d.pctOfHours), 10, true) +
-        pad(`$${n(d.hourlyCost).toFixed(2)}`, 12, true) +
-        pad(`$${n(d.hourlyBilling).toFixed(2)}`, 12, true) +
-        pad(money(d.totalRevenue), 14, true) +
-        pad(money(d.totalCost), 12, true),
+      pad(String(d.department || ''), 18) +
+        pad(String(n(d.hours)), 8, true) +
+        pad(String(n(d.resourceCount ?? 1)), 8, true) +
+        pad(String(n(d.effectiveHours ?? d.hours)), 8, true) +
+        pad(pct(d.pctOfHours), 8, true) +
+        pad(`$${n(d.hourlyCost).toFixed(2)}`, 11, true) +
+        pad(`$${n(d.hourlyBilling).toFixed(2)}`, 11, true) +
+        pad(money(d.totalRevenue), 12, true) +
+        pad(money(d.totalCost), 10, true),
       { size: 8, mono: true },
     );
   }
   add(
-    pad('Total', 22) +
-      pad(String(totalHours), 10, true) +
-      pad('100%', 10, true) +
-      pad(`$${avgCost.toFixed(2)}`, 12, true) +
-      pad(`$${avgBill.toFixed(2)}`, 12, true) +
-      pad(money(labourRevenue), 14, true) +
-      pad(money(labourCost), 12, true),
+    pad('Total', 18) +
+      pad(String(totalHours), 8, true) +
+      pad('', 8, true) +
+      pad('', 8, true) +
+      pad('100%', 8, true) +
+      pad(`$${avgCost.toFixed(2)}`, 11, true) +
+      pad(`$${avgBill.toFixed(2)}`, 11, true) +
+      pad(money(labourRevenue), 12, true) +
+      pad(money(labourCost), 10, true),
     { size: 8, bold: true, gap: 6, mono: true },
   );
   add(
@@ -121,14 +127,20 @@ export function buildEstimatePdf(estimate: AnyRec): Buffer {
 
   add('Resources', { size: 13, bold: true, gap: 8 });
   add(
-    pad('Role', 28) + pad('Loc', 12) + pad('Hours', 10, true) + pad('Revenue', 14, true) + pad('Cost', 12, true),
+    pad('Role', 24) +
+      pad('Loc', 10) +
+      pad('Hours', 8, true) +
+      pad('People', 8, true) +
+      pad('Revenue', 14, true) +
+      pad('Cost', 12, true),
     { size: 8, bold: true, mono: true },
   );
   for (const r of resources) {
     add(
-      pad(String(r.roleName || ''), 28) +
-        pad(String(r.location || ''), 12) +
-        pad(String(n(r.hours)), 10, true) +
+      pad(String(r.roleName || ''), 24) +
+        pad(String(r.location || ''), 10) +
+        pad(String(n(r.hours)), 8, true) +
+        pad(String(n(r.resourceCount ?? 1)), 8, true) +
         pad(money(r.totalRevenue), 14, true) +
         pad(money(r.totalCost), 12, true),
       { size: 8, mono: true },

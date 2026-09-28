@@ -127,9 +127,11 @@ describe('calculateEstimate (Excel/HTML parity)', () => {
     const qa = result.departmentTotals.find((d) => d.department === 'QA');
     assert.ok(qa);
     assert.equal(qa!.hours, 120);
-    // Auto sprint: ceil(120 / 80) = 2
+    assert.equal(qa!.resourceCount, 2); // offshore + onshore rows default to 1 each
+    assert.equal(qa!.effectiveHours, 60); // 120 ÷ 2
+    // Critical path: QA 60 effective hours → ceil(60/80) = 1
     assert.equal(result.sprintWeeks, 2);
-    assert.equal(result.sprintCount, 2);
+    assert.equal(result.sprintCount, 1);
     assert.equal(result.engagementFeeSource, 'negotiated_price');
     assert.equal(result.engagementFee, 50000);
     assert.equal(result.targetMarginPct, 50);
@@ -142,6 +144,41 @@ describe('calculateEstimate (Excel/HTML parity)', () => {
       s.name.includes('Warranty Period'),
     );
     assert.equal(warrantyLines.length, 0);
+  });
+
+  it('reduces sprint count when department has multiple people', () => {
+    const result = calculateEstimate({
+      resources: [
+        {
+          roleName: 'Code Development',
+          location: 'OFFSHORE',
+          hours: 160,
+          resourceCount: 2,
+          hourlyCost: 8,
+          hourlyBilling: 45,
+        },
+      ],
+      expenses: [],
+      negotiatedPrice: 20000,
+      settings: {
+        ...DEFAULT_CALC_SETTINGS,
+        riskPct: 0,
+        contingencyPct: 0,
+        infrastructurePct: 0,
+        overheadPct: 0,
+        supportPct: 0,
+        warrantyPct: 0,
+        maintenancePct: 0,
+      },
+      paymentTerms: [],
+    });
+    const code = result.departmentTotals.find((d) => d.department === 'Code Development');
+    assert.ok(code);
+    assert.equal(code!.hours, 160);
+    assert.equal(code!.resourceCount, 2);
+    assert.equal(code!.effectiveHours, 80);
+    // ceil(80 / 80) = 1 (would be 2 with a single person)
+    assert.equal(result.sprintCount, 1);
   });
 
   it('builds warranty payment blocks from period days', () => {

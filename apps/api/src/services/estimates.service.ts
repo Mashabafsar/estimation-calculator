@@ -17,6 +17,7 @@ export interface ResourceInput {
   roleName: string;
   location: ResourceLocation;
   hours: number;
+  resourceCount?: number;
   hourlyCost: number;
   hourlyBilling: number;
 }
@@ -112,6 +113,7 @@ async function runCalculation(payload: {
       roleName: r.roleName,
       location: r.location,
       hours: Number(r.hours),
+      resourceCount: r.resourceCount,
       hourlyCost: Number(r.hourlyCost),
       hourlyBilling: Number(r.hourlyBilling),
     })),
@@ -286,39 +288,40 @@ export async function createEstimate(userId: string, payload: EstimatePayload) {
       warrantyPeriodDays: calc.warrantyPeriodDays,
       sprintPaymentPlan: (payload.sprintPaymentPlan as any) ?? undefined,
       createdById: userId,
-      resources: {
-        create: payload.resources.map((r, i) => ({
-          roleId: r.roleId,
-          roleName: r.roleName,
-          location: r.location,
-          hours: decimal(r.hours),
-          hourlyCost: decimal(r.hourlyCost),
-          hourlyBilling: decimal(r.hourlyBilling),
-          totalCost: decimal(r.hours * r.hourlyCost),
-          totalRevenue: decimal(r.hours * r.hourlyBilling),
-          sortOrder: i,
-        })),
-      },
-      expenses: {
-        create: payload.expenses.map((e, i) => ({
-          category: e.category,
-          name: e.name,
-          amount: decimal(e.amount),
-          isRecurring: e.isRecurring ?? false,
-          notes: e.notes,
-          sortOrder: i,
-        })),
-      },
-      versions: {
-        create: {
-          version: 1,
-          changeSummary: 'Initial version',
-          createdById: userId,
-          snapshot: { payload, calc } as any,
+        resources: {
+          create: payload.resources.map((r, i) => ({
+            roleId: r.roleId,
+            roleName: r.roleName,
+            location: r.location,
+            hours: decimal(r.hours),
+            resourceCount: Math.max(1, Math.min(100, Math.round(Number(r.resourceCount) || 1))),
+            hourlyCost: decimal(r.hourlyCost),
+            hourlyBilling: decimal(r.hourlyBilling),
+            totalCost: decimal(r.hours * r.hourlyCost),
+            totalRevenue: decimal(r.hours * r.hourlyBilling),
+            sortOrder: i,
+          })),
+        },
+        expenses: {
+          create: payload.expenses.map((e, i) => ({
+            category: e.category,
+            name: e.name,
+            amount: decimal(e.amount),
+            isRecurring: e.isRecurring ?? false,
+            notes: e.notes,
+            sortOrder: i,
+          })),
+        },
+        versions: {
+          create: {
+            version: 1,
+            changeSummary: 'Initial version',
+            createdById: userId,
+            snapshot: { payload, calc } as any,
+          },
         },
       },
-    },
-  });
+    });
 
   await prisma.estimateCalculation.create({ data: calcCreateData(estimate.id, calc) });
 
@@ -377,6 +380,7 @@ export async function updateEstimate(id: string, userId: string, payload: Estima
             roleName: r.roleName,
             location: r.location,
             hours: decimal(r.hours),
+            resourceCount: Math.max(1, Math.min(100, Math.round(Number(r.resourceCount) || 1))),
             hourlyCost: decimal(r.hourlyCost),
             hourlyBilling: decimal(r.hourlyBilling),
             totalCost: decimal(r.hours * r.hourlyCost),

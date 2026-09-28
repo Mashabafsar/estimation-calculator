@@ -296,6 +296,8 @@ model EstimateResource {
   roleName      String
   location      ResourceLocation @default(OFFSHORE)
   hours         Decimal          @db.Decimal(12, 2)
+  /// People assigned to this department (affects sprint critical path only).
+  resourceCount Int              @default(1)
   hourlyCost    Decimal          @db.Decimal(12, 2)
   hourlyBilling Decimal          @db.Decimal(12, 2)
   totalCost     Decimal          @db.Decimal(14, 2)

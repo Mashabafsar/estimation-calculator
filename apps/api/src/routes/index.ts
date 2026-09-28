@@ -26,6 +26,7 @@ const resourceSchema = z.object({
   roleName: z.string().min(1),
   location: z.nativeEnum(ResourceLocation),
   hours: z.number().min(0),
+  resourceCount: z.number().int().min(1).max(100).optional().default(1),
   hourlyCost: z.number().min(0),
   hourlyBilling: z.number().min(0),
 });
@@ -48,7 +49,7 @@ const estimateSchema = z.object({
   expectedDelivery: z.string().optional(),
   currencyId: z.string().optional(),
   negotiatedPrice: z.number().nullable().optional(),
-  sprintCount: z.number().int().min(1).max(30).nullable().optional(),
+  sprintCount: z.number().int().min(1).max(60).nullable().optional(),
   sprintWeeks: z.number().int().min(1).max(8).nullable().optional(),
   warrantyPeriodDays: z.number().int().min(0).max(730).nullable().optional(),
   sprintPaymentPlan: z

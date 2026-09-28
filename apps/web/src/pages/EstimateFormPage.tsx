@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useForm, useFieldArray } from 'react-hook-form';
 import {
   Bar,
@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { api, money, pct } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
-import { ButtonLoader } from '../components/Loader';
+import { ButtonLoader, PageLoader } from '../components/Loader';
 import { EstimateFinancialResults } from '../components/EstimateFinancialResults';
 
 interface Role {
@@ -67,6 +67,8 @@ interface CalcResult {
   departmentTotals: Array<{
     department: string;
     hours: number;
+    resourceCount?: number;
+    effectiveHours?: number;
     hourlyCost: number;
     hourlyBilling: number;
     totalCost: number;
@@ -104,6 +106,7 @@ type FormValues = {
     roleName: string;
     location: 'ONSHORE' | 'OFFSHORE';
     hours: number;
+    resourceCount: number;
     hourlyCost: number;
     hourlyBilling: number;
   }>;
@@ -118,6 +121,8 @@ type FormValues = {
 type PaymentPlanRow = { name: string; percentage: number };
 
 export function EstimateFormPage() {
+  const { id } = useParams();
+  const isEdit = Boolean(id);
   const { token } = useAuth();
   const navigate = useNavigate();
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -126,13 +131,15 @@ export function EstimateFormPage() {
   const [calc, setCalc] = useState<CalcResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [calculating, setCalculating] = useState(false);
+  const [loadingEstimate, setLoadingEstimate] = useState(isEdit);
   const [expandedSprint, setExpandedSprint] = useState<number | null>(null);
   const [uploadMsg, setUploadMsg] = useState('');
   const [uploading, setUploading] = useState(false);
   const [paymentPlan, setPaymentPlan] = useState<PaymentPlanRow[]>([]);
   const [planDirty, setPlanDirty] = useState(false);
+  const suppressTemplateSync = useRef(isEdit);
 
-  const { register, control, watch, setValue, handleSubmit, getValues } = useForm<FormValues>({
+  const { register, control, watch, setValue, handleSubmit, getValues, reset } = useForm<FormValues>({
     defaultValues: {
       projectName: '',
       description: '',
@@ -175,7 +182,82 @@ export function EstimateFormPage() {
   }, [token]);
 
   useEffect(() => {
+    if (!isEdit || !id) return;
+    setLoadingEstimate(true);
+    api<any>(`/estimates/${id}`, { token })
+      .then((estimate) => {
+        suppressTemplateSync.current = true;
+        reset({
+          projectName: estimate.projectName || '',
+          description: estimate.description || '',
+          clientId: estimate.clientId || '',
+          templateId: estimate.templateId || '',
+          complexity: estimate.complexity || 'MEDIUM',
+          negotiatedPrice:
+            estimate.negotiatedPrice != null && estimate.negotiatedPrice !== ''
+              ? Number(estimate.negotiatedPrice)
+              : '',
+          warrantyPeriodDays: Number(estimate.warrantyPeriodDays ?? 0),
+          resources: (estimate.resources || []).map((r: any) => ({
+            roleId: r.roleId || '',
+            roleName: r.roleName,
+            location: r.location,
+            hours: Number(r.hours) || 0,
+            resourceCount: Math.max(1, Number(r.resourceCount) || 1),
+            hourlyCost: Number(r.hourlyCost) || 0,
+            hourlyBilling: Number(r.hourlyBilling) || 0,
+          })),
+          expenses: (estimate.expenses || []).map((e: any) => ({
+            category: e.category,
+            name: e.name,
+            amount: Number(e.amount) || 0,
+            isRecurring: Boolean(e.isRecurring),
+          })),
+        });
+        if (Array.isArray(estimate.sprintPaymentPlan) && estimate.sprintPaymentPlan.length) {
+          setPaymentPlan(
+            estimate.sprintPaymentPlan.map((p: any) => ({
+              name: p.name,
+              percentage: Number(p.percentage) || 0,
+            })),
+          );
+          setPlanDirty(true);
+        }
+        if (estimate.calculation) {
+          setCalc({
+            ...estimate.calculation,
+            engagementFee: Number(estimate.calculation.engagementFee),
+            directCosts: Number(estimate.calculation.directCosts),
+            directMargin: Number(estimate.calculation.directMargin),
+            grossMarginPct: Number(estimate.calculation.grossMarginPct),
+            recommendedPrice: Number(estimate.calculation.recommendedPrice),
+            excessDeficit: Number(estimate.calculation.excessDeficit),
+            salesCommission: Number(estimate.calculation.salesCommission),
+            cogs: Number(estimate.calculation.cogs),
+            labourCost: Number(estimate.calculation.labourCost),
+            labourRevenue: Number(estimate.calculation.labourRevenue),
+            totalHours: Number(estimate.calculation.totalHours),
+            marketRate: Number(estimate.calculation.marketRate ?? 0),
+            apiRate: Number(estimate.calculation.apiRate ?? 0),
+            sprintCount: Number(estimate.sprintCount ?? estimate.calculation.sprintCount ?? 1),
+            sprintWeeks: Number(estimate.sprintWeeks ?? estimate.calculation.sprintWeeks ?? 2),
+            sprintBreakdown: estimate.calculation.sprintBreakdown || [],
+            departmentTotals: estimate.calculation.departmentTotals || [],
+            recommendations: estimate.calculation.recommendations || [],
+            ...(estimate.calculation.rawBreakdown || {}),
+          });
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoadingEstimate(false));
+  }, [id, isEdit, token, reset]);
+
+  useEffect(() => {
     if (!templateId) return;
+    if (suppressTemplateSync.current) {
+      suppressTemplateSync.current = false;
+      return;
+    }
     const tpl = templates.find((t) => t.id === templateId);
     if (!tpl) return;
     resources.replace(
@@ -184,6 +266,7 @@ export function EstimateFormPage() {
         roleName: tr.role.name,
         location: tr.location,
         hours: Number(tr.defaultHours) || 0,
+        resourceCount: 1,
         hourlyCost: Number(tr.costRateOverride ?? tr.role.hourlyCostRate),
         hourlyBilling: Number(tr.billRateOverride ?? tr.role.hourlyBillingRate),
       })),
@@ -250,6 +333,7 @@ export function EstimateFormPage() {
             roleName: role?.name || d.roleName || d.name,
             location: (d.location || role?.defaultLocation || 'OFFSHORE') as 'ONSHORE' | 'OFFSHORE',
             hours: d.hours,
+            resourceCount: 1,
             hourlyCost: Number(d.hourlyCost ?? role?.hourlyCostRate ?? 0),
             hourlyBilling: Number(d.hourlyBilling ?? role?.hourlyBillingRate ?? 0),
           };
@@ -314,11 +398,18 @@ export function EstimateFormPage() {
   async function onSubmit(values: FormValues) {
     setSaving(true);
     try {
-      const estimate = await api<{ id: string }>('/estimates', {
-        method: 'POST',
-        token,
-        body: JSON.stringify(buildPayload(values)),
-      });
+      const payload = buildPayload(values);
+      const estimate = isEdit
+        ? await api<{ id: string }>(`/estimates/${id}`, {
+            method: 'PUT',
+            token,
+            body: JSON.stringify(payload),
+          })
+        : await api<{ id: string }>('/estimates', {
+            method: 'POST',
+            token,
+            body: JSON.stringify(payload),
+          });
       navigate(`/estimates/${estimate.id}`);
     } finally {
       setSaving(false);
@@ -357,13 +448,24 @@ export function EstimateFormPage() {
   const avgRateCost = calc && calc.totalHours > 0 ? calc.labourCost / calc.totalHours : 0;
   const avgRateBill = calc && calc.totalHours > 0 ? calc.labourRevenue / calc.totalHours : 0;
 
+  if (loadingEstimate) return <PageLoader label="Loading estimate…" />;
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="page-title">New Estimate</h1>
+          {isEdit && (
+            <Link to={`/estimates/${id}`} className="text-sm text-[var(--color-muted)]">
+              ← Back to estimate
+            </Link>
+          )}
+          <h1 className={`page-title ${isEdit ? 'mt-1' : ''}`}>
+            {isEdit ? 'Edit Estimate' : 'New Estimate'}
+          </h1>
           <p className="page-subtitle">
-            Upload a Hours Breakdown workbook or pick a template. Target margin defaults to 50%.
+            {isEdit
+              ? 'Update departments, headcount, rates, and payment plan. Saving creates a new version.'
+              : 'Upload a Hours Breakdown workbook or pick a template. Target margin defaults to 50%.'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -376,7 +478,7 @@ export function EstimateFormPage() {
             {calculating ? <ButtonLoader label="Calculating…" /> : 'Calculate'}
           </button>
           <button className="btn btn-primary" disabled={saving || calculating || uploading}>
-            {saving ? <ButtonLoader label="Saving…" /> : 'Save Estimate'}
+            {saving ? <ButtonLoader label="Saving…" /> : isEdit ? 'Save Changes' : 'Save Estimate'}
           </button>
         </div>
       </div>
@@ -485,8 +587,8 @@ export function EstimateFormPage() {
             <div className="sm:col-span-2 rounded-lg bg-[var(--color-canvas)] px-3 py-2 text-xs text-[var(--color-muted)]">
               Target margin: <strong className="text-[var(--color-ink)]">50%</strong> · Advance
               payment: <strong className="text-[var(--color-ink)]">30%</strong> · Sprint weeks fixed
-              at <strong className="text-[var(--color-ink)]">2</strong> · Sprint count
-              auto-calculated from heaviest department hours
+              at <strong className="text-[var(--color-ink)]">2</strong> · Sprint count from heaviest
+              department after dividing hours by people
             </div>
           </div>
 
@@ -504,6 +606,7 @@ export function EstimateFormPage() {
                     roleName: role.name,
                     location: role.defaultLocation,
                     hours: 0,
+                    resourceCount: 1,
                     hourlyCost: Number(role.hourlyCostRate),
                     hourlyBilling: Number(role.hourlyBillingRate),
                   });
@@ -515,7 +618,7 @@ export function EstimateFormPage() {
             <div className="space-y-2">
               {resources.fields.map((field, index) => (
                 <div key={field.id} className="grid grid-cols-12 gap-2 items-end">
-                  <label className="col-span-4 text-xs space-y-1">
+                  <label className="col-span-3 text-xs space-y-1">
                     <span>Department / Role</span>
                     <select
                       className="input"
@@ -553,6 +656,17 @@ export function EstimateFormPage() {
                       type="number"
                       step="0.5"
                       {...register(`resources.${index}.hours`, { valueAsNumber: true })}
+                    />
+                  </label>
+                  <label className="col-span-1 text-xs space-y-1">
+                    <span>People</span>
+                    <input
+                      className="input"
+                      type="number"
+                      min={1}
+                      max={100}
+                      step={1}
+                      {...register(`resources.${index}.resourceCount`, { valueAsNumber: true })}
                     />
                   </label>
                   <label className="col-span-1 text-xs space-y-1">
@@ -705,6 +819,8 @@ export function EstimateFormPage() {
                     <tr>
                       <th className="px-4 py-2">Department</th>
                       <th className="px-4 py-2">Hours</th>
+                      <th className="px-4 py-2">People</th>
+                      <th className="px-4 py-2">Effective</th>
                       <th className="px-4 py-2">% Hours</th>
                       <th className="px-4 py-2">Rate Cost</th>
                       <th className="px-4 py-2">Rate Bill</th>
@@ -717,6 +833,8 @@ export function EstimateFormPage() {
                       <tr key={d.department} className="border-t border-[var(--color-line)]">
                         <td className="px-4 py-2 font-medium">{d.department}</td>
                         <td className="px-4 py-2">{d.hours}</td>
+                        <td className="px-4 py-2">{d.resourceCount ?? 1}</td>
+                        <td className="px-4 py-2">{d.effectiveHours ?? d.hours}</td>
                         <td className="px-4 py-2">{pct(d.pctOfHours)}</td>
                         <td className="px-4 py-2">${d.hourlyCost.toFixed(2)}</td>
                         <td className="px-4 py-2">${d.hourlyBilling.toFixed(2)}</td>
@@ -727,6 +845,7 @@ export function EstimateFormPage() {
                     <tr className="border-t border-[var(--color-line)] bg-[var(--color-canvas)] font-semibold">
                       <td className="px-4 py-2">Total</td>
                       <td className="px-4 py-2">{calc.totalHours}</td>
+                      <td className="px-4 py-2" colSpan={2} />
                       <td className="px-4 py-2">100%</td>
                       <td className="px-4 py-2">${avgRateCost.toFixed(2)}</td>
                       <td className="px-4 py-2">${avgRateBill.toFixed(2)}</td>

@@ -36,6 +36,7 @@ export default function App() {
             <Route index element={<DashboardPage />} />
             <Route path="estimates" element={<EstimatesPage />} />
             <Route path="estimates/new" element={<EstimateFormPage />} />
+            <Route path="estimates/:id/edit" element={<EstimateFormPage />} />
             <Route path="estimates/:id" element={<EstimateDetailPage />} />
             <Route path="clients" element={<ClientsPage />} />
             <Route path="templates" element={<TemplatesPage />} />
