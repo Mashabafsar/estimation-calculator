@@ -12,6 +12,7 @@ export function createApp() {
   app.use(helmet());
   app.use(cors({ origin: config.corsOrigin, credentials: true }));
   app.use(express.json({ limit: '15mb' }));
+
   app.use(morgan(config.env === 'production' ? 'combined' : 'dev'));
   app.use(auditLog);
 

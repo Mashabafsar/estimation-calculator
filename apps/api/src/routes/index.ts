@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { config } from '../config/index.js';
 import { asyncHandler } from '../utils/errors.js';
 import { authenticate, authorize, requireWrite } from '../middleware/auth.js';
 import * as authService from '../services/auth.service.js';
@@ -10,6 +11,8 @@ import * as clientsService from '../services/clients.service.js';
 import * as estimatesService from '../services/estimates.service.js';
 import * as dashboardService from '../services/dashboard.service.js';
 import * as hoursSourceService from '../services/hoursSource.service.js';
+import * as signaturesService from '../services/signatures.service.js';
+
 import {
   ApprovalAction,
   Complexity,
@@ -511,5 +514,142 @@ router.get(
     res.json({ success: true, data });
   }),
 );
+
+const signatureSchema = z.object({
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  jobTitle: z.string().min(1),
+  photoUrl: z.string().optional().nullable(),
+  logoUrl: z.string().optional().nullable(),
+  directLine: z.string().optional().nullable(),
+  cellPhone: z.string().optional().nullable(),
+  email: z.union([z.string().email(), z.literal('')]).optional().nullable(),
+  facebook: z.string().optional().nullable(),
+  instagram: z.string().optional().nullable(),
+  linkedin: z.string().optional().nullable(),
+  youtube: z.string().optional().nullable(),
+  twitter: z.string().optional().nullable(),
+  website2: z.string().optional().nullable(),
+  customLinkLabel: z.string().optional().nullable(),
+  customLinkUrl: z.string().optional().nullable(),
+  companyName: z.string().optional().nullable(),
+  companyUrl: z.string().optional().nullable(),
+  companyStreet: z.string().optional().nullable(),
+  companyCity: z.string().optional().nullable(),
+  companyRegion: z.string().optional().nullable(),
+  companyPostal: z.string().optional().nullable(),
+  tagline: z.string().optional().nullable(),
+});
+
+// Email signatures (public share endpoints first)
+router.get(
+  '/signatures/share/:slug',
+  asyncHandler(async (req, res) => {
+    res.json({ success: true, data: await signaturesService.getByShareSlug(req.params.slug) });
+  }),
+);
+
+router.get(
+  '/signatures/share/:slug/vcard',
+  asyncHandler(async (req, res) => {
+    const data = await signaturesService.getByShareSlug(req.params.slug);
+    const vcard = signaturesService.buildVcard(data);
+    const filename = `${[data.firstName, data.lastName].filter(Boolean).join('-') || 'contact'}.vcf`;
+    res.setHeader('Content-Type', 'text/vcard; charset=utf-8');
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(vcard);
+  }),
+);
+
+router.get(
+  '/signatures',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const isAdmin = req.user!.role === UserRole.ADMIN;
+    res.json({ success: true, data: await signaturesService.listSignatures(req.user!.id, isAdmin) });
+  }),
+);
+
+router.post(
+  '/signatures/preview',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const body = signatureSchema.parse(req.body);
+    const origin = requestOrigin(req);
+    const sharePath =
+      typeof req.body?.shareSlug === 'string' && req.body.shareSlug
+        ? `/s/${req.body.shareSlug}`
+        : '/s/preview';
+    const preview = signaturesService.previewFromInput(body, sharePath);
+    const cardUrl = `${origin}${preview.sharePath}`;
+    res.json({
+      success: true,
+      data: {
+        html: signaturesService.buildSignatureHtml(preview, { cardUrl, assetBase: origin }),
+        shareUrl: cardUrl,
+      },
+    });
+  }),
+);
+
+router.post(
+  '/signatures',
+  authenticate,
+  requireWrite,
+  asyncHandler(async (req, res) => {
+    const body = signatureSchema.parse(req.body);
+    const saved = await signaturesService.createSignature(req.user!.id, body);
+    const origin = requestOrigin(req);
+    const cardUrl = `${origin}${saved.sharePath}`;
+    res.status(201).json({
+      success: true,
+      data: {
+        ...saved,
+        shareUrl: cardUrl,
+        html: signaturesService.buildSignatureHtml(saved, { cardUrl, assetBase: origin }),
+      },
+    });
+  }),
+);
+
+router.put(
+  '/signatures/:id',
+  authenticate,
+  requireWrite,
+  asyncHandler(async (req, res) => {
+    const body = signatureSchema.parse(req.body);
+    const isAdmin = req.user!.role === UserRole.ADMIN;
+    const saved = await signaturesService.updateSignature(req.params.id, req.user!.id, isAdmin, body);
+    const origin = requestOrigin(req);
+    const cardUrl = `${origin}${saved.sharePath}`;
+    res.json({
+      success: true,
+      data: {
+        ...saved,
+        shareUrl: cardUrl,
+        html: signaturesService.buildSignatureHtml(saved, { cardUrl, assetBase: origin }),
+      },
+    });
+  }),
+);
+
+router.delete(
+  '/signatures/:id',
+  authenticate,
+  requireWrite,
+  asyncHandler(async (req, res) => {
+    const isAdmin = req.user!.role === UserRole.ADMIN;
+    res.json({
+      success: true,
+      data: await signaturesService.deleteSignature(req.params.id, req.user!.id, isAdmin),
+    });
+  }),
+);
+
+function requestOrigin(req: { headers: { origin?: string } }) {
+  if (req.headers.origin) return req.headers.origin.replace(/\/$/, '');
+  return config.corsOrigin.replace(/\/$/, '');
+}
 
 export default router;

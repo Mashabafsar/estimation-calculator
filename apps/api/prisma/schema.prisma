@@ -91,6 +91,7 @@ model User {
   estimateVersions  EstimateVersion[]  @relation("VersionAuthor")
   approvals         Approval[]
   auditLogs         AuditLog[]
+  emailSignatures   EmailSignature[]
 
   @@map("users")
 }
@@ -455,6 +456,44 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+model EmailSignature {
+  id              String   @id @default(cuid())
+  shareSlug       String   @unique
+  firstName       String
+  lastName        String
+  jobTitle        String
+  photoUrl        String?  @db.Text
+  logoUrl         String?  @db.Text
+  directLine      String?
+  cellPhone       String?
+  email           String?
+  facebook        String?
+  instagram       String?
+  linkedin        String?
+  youtube         String?
+  twitter         String?
+  website2        String?
+  customLinkLabel String?
+  customLinkUrl   String?
+  companyName     String   @default("Agency Partner Interactive")
+  companyUrl      String   @default("https://agencypartner.com")
+  companyStreet   String   @default("5830 Granite Pkwy STE 100 - 253")
+  companyCity     String   @default("Plano")
+  companyRegion   String   @default("TX")
+  companyPostal   String   @default("75024")
+  tagline         String?  @default("Be the catalyst to unlock growth and value for every business.")
+  isActive        Boolean  @default(true)
+  createdById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  createdBy User @relation(fields: [createdById], references: [id])
+
+  @@index([createdById])
+  @@index([createdAt])
+  @@map("email_signatures")
 }
 
 /// Extensibility hooks for future AI features (no runtime AI yet)
