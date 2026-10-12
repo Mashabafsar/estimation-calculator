@@ -11,6 +11,9 @@ import { ClientsPage } from './pages/ClientsPage';
 import { TemplatesPage } from './pages/TemplatesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { PageLoader } from './components/Loader';
+import { SignaturesPage } from './pages/SignaturesPage';
+import { SharedSignaturePage } from './pages/SharedSignaturePage';
+
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -25,6 +28,7 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/s/:slug" element={<SharedSignaturePage />} />
           <Route
             path="/"
             element={
@@ -40,6 +44,7 @@ export default function App() {
             <Route path="estimates/:id" element={<EstimateDetailPage />} />
             <Route path="clients" element={<ClientsPage />} />
             <Route path="templates" element={<TemplatesPage />} />
+            <Route path="signatures" element={<SignaturesPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Routes>

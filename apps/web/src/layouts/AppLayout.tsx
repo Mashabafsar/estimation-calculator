@@ -8,6 +8,7 @@ import {
   LogOut,
   Moon,
   Sun,
+  ContactRound,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -19,6 +20,7 @@ const nav = [
   { to: '/estimates', label: 'Estimates', icon: FileSpreadsheet },
   { to: '/clients', label: 'Clients', icon: Users },
   { to: '/templates', label: 'Templates', icon: Layers },
+  { to: '/signatures', label: 'E-Signature', icon: ContactRound },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
