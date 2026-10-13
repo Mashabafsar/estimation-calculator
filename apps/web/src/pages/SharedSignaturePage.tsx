@@ -9,8 +9,10 @@ import {
   Linkedin,
   Mail,
   MapPin,
+  Phone,
   Smartphone,
   Twitter,
+  UserRound,
   Youtube,
   type LucideIcon,
 } from 'lucide-react';
@@ -25,9 +27,11 @@ import {
 type RowIcon =
   | 'location'
   | 'phone'
+  | 'office'
   | 'email'
   | 'web'
   | 'link'
+  | 'person'
   | 'facebook'
   | 'instagram'
   | 'linkedin'
@@ -37,9 +41,11 @@ type RowIcon =
 const ROW_ICONS: Record<RowIcon, LucideIcon> = {
   location: MapPin,
   phone: Smartphone,
+  office: Phone,
   email: Mail,
   web: Globe,
   link: Link2,
+  person: UserRound,
   facebook: Facebook,
   instagram: Instagram,
   linkedin: Linkedin,
@@ -235,6 +241,17 @@ export function SharedSignaturePage() {
               href={`tel:${data.cellPhone.replace(/[^\d+]/g, '')}`}
             >
               {data.cellPhone}
+            </ContactRow>
+          ) : null}
+
+          {((data.reportsTo || data.directLine || '').trim()) ? (
+            <ContactRow
+              icon="office"
+              meta="direct line"
+              index={nextIndex()}
+              href={`tel:${(data.reportsTo || data.directLine || '').trim().replace(/[^\d+]/g, '')}`}
+            >
+              {(data.reportsTo || data.directLine || '').trim()}
             </ContactRow>
           ) : null}
 

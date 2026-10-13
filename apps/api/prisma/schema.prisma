@@ -468,6 +468,7 @@ model EmailSignature {
   logoUrl         String?  @db.Text
   directLine      String?
   cellPhone       String?
+  reportsTo       String?
   email           String?
   facebook        String?
   instagram       String?

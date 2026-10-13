@@ -19,8 +19,10 @@ function formFromRow(row: SavedSignature): SignatureForm {
     jobTitle: row.jobTitle,
     photoUrl: row.photoUrl || '',
     logoUrl: row.logoUrl || '',
-    directLine: row.directLine,
+    directLine: '',
     cellPhone: row.cellPhone,
+    // Direct Line field (renamed from Reports to); fall back to legacy office number
+    reportsTo: row.reportsTo || row.directLine || '',
     email: row.email,
     facebook: row.facebook,
     instagram: row.instagram,
@@ -253,7 +255,7 @@ export function SignaturesPage() {
       setCopyState('copied');
       setMessage(
         mode === 'rich'
-          ? 'Copied the email signature preview — paste with Cmd/Ctrl+V into a rich-text compose window.'
+          ? 'Copied one card. Paste it into Gmail, Outlook, or Apple Mail.'
           : 'Copied as plain text. Try Copy for email again, or use Copy HTML code.',
       );
       window.setTimeout(() => setCopyState('idle'), 2500);
@@ -354,8 +356,8 @@ export function SignaturesPage() {
             <div className="grid sm:grid-cols-2 gap-3">
               {(
                 [
-                  ['directLine', 'Direct line / office'],
                   ['cellPhone', 'Cell phone / mobile'],
+                  ['reportsTo', 'Direct Line'],
                   ['email', 'Email'],
                 ] as const
               ).map(([key, label]) => (
@@ -538,7 +540,7 @@ export function SignaturesPage() {
               <SignatureCard data={form} saveHref={previewShare} compact />
             )}
             <p className="mt-2 text-xs text-[var(--color-muted)]">
-              Copy for email pastes this preview into Gmail, Outlook, or Apple Mail.
+              Copy for email puts one card on the clipboard for Gmail, Outlook, or Apple Mail.
             </p>
           </div>
         </div>

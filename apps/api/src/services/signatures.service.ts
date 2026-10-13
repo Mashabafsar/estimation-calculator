@@ -34,6 +34,7 @@ export type SignatureInput = {
   logoUrl?: string | null;
   directLine?: string | null;
   cellPhone?: string | null;
+  reportsTo?: string | null;
   email?: string | null;
   facebook?: string | null;
   instagram?: string | null;
@@ -75,14 +76,62 @@ function stripMedia(value?: string | null) {
   return '';
 }
 
-function normalizeSocial(network: SocialNetwork, value?: string | null) {
+function socialHostOk(network: SocialNetwork, host: string) {
+  const h = host.replace(/^www\./i, '').toLowerCase();
+  switch (network) {
+    case 'facebook':
+      return h.includes('facebook.com') || h.includes('fb.com');
+    case 'instagram':
+      return h.includes('instagram.com');
+    case 'linkedin':
+      return h.includes('linkedin.com');
+    case 'youtube':
+      return h.includes('youtube.com') || h.includes('youtu.be');
+    case 'twitter':
+      return h.includes('twitter.com') || h === 'x.com';
+    default:
+      return false;
+  }
+}
+
+function socialHandle(network: SocialNetwork, value?: string | null) {
   const raw = strip(value, 300);
   if (!raw) return '';
-  if (/^https?:\/\//i.test(raw)) return raw;
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      if (!socialHostOk(network, parsed.hostname)) return '';
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      if (network === 'linkedin') {
+        if (parts[0] && /^(in|company)$/i.test(parts[0]) && parts[1]) {
+          return `${parts[0].toLowerCase()}/${parts[1]}`;
+        }
+        return '';
+      }
+      const last = (parts[parts.length - 1] || '').replace(/^@/, '');
+      return last && !/\s/.test(last) ? last : '';
+    } catch {
+      return '';
+    }
+  }
+
+  // Plain handles only — reject free-text / placeholder sentences
+  if (/\s/.test(raw) || raw.length > 64) return '';
   const handle = raw.replace(/^@/, '').replace(/^\/+/, '');
+  if (!handle) return '';
+  if (network === 'linkedin' && /^(in|company)\//i.test(handle)) return handle;
+  return handle;
+}
+
+function normalizeSocial(network: SocialNetwork, value?: string | null) {
+  const handle = socialHandle(network, value);
   if (!handle) return '';
   if (network === 'linkedin' && /^(in|company)\//i.test(handle)) {
     return `https://www.linkedin.com/${handle}`;
+  }
+  if (network === 'youtube') {
+    return `https://www.youtube.com/@${handle.replace(/^@/, '')}`;
   }
   return `${SOCIAL_BASES[network]}${handle}`;
 }
@@ -110,6 +159,69 @@ function escapeVcard(value: string) {
   return value.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/;/g, '\\;').replace(/,/g, '\\,');
 }
 
+/** RFC 2426 line folding — keeps large PHOTO payloads importable. */
+function foldVcardLine(line: string) {
+  if (line.length <= 75) return line;
+  let out = line.slice(0, 75);
+  let i = 75;
+  while (i < line.length) {
+    out += `\r\n ${line.slice(i, i + 74)}`;
+    i += 74;
+  }
+  return out;
+}
+
+function vcardPhotoType(mime: string) {
+  const m = mime.toLowerCase().replace(/^image\//, '');
+  if (m === 'jpg' || m === 'jpeg') return 'JPEG';
+  if (m === 'png') return 'PNG';
+  if (m === 'gif') return 'GIF';
+  if (m === 'webp') return 'WEBP';
+  return '';
+}
+
+/** Extract a Contacts-compatible PHOTO line (Apple ignores SVG). */
+function buildVcardPhoto(photoUrl?: string | null): string | null {
+  const raw = (photoUrl ?? '').trim();
+  if (!raw) return null;
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+      return foldVcardLine(`PHOTO;VALUE=URI:${raw}`);
+    } catch {
+      return null;
+    }
+  }
+
+  const dataMatch = raw.match(/^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/i);
+  if (!dataMatch) return null;
+
+  let mime = dataMatch[1].toLowerCase();
+  let b64 = dataMatch[2].replace(/\s+/g, '');
+
+  // Many uploaded avatars are SVG wrappers around a JPEG/PNG — Contacts needs the raster.
+  if (mime.includes('svg')) {
+    try {
+      const svg = Buffer.from(b64, 'base64').toString('utf8');
+      const embedded = svg.match(/data:(image\/(?:jpeg|jpg|png|gif|webp));base64,([A-Za-z0-9+/=]+)/i);
+      if (!embedded) return null;
+      mime = embedded[1].toLowerCase();
+      b64 = embedded[2];
+    } catch {
+      return null;
+    }
+  }
+
+  const type = vcardPhotoType(mime);
+  if (!type || !b64) return null;
+  // Cap ~1.5MB base64 so .vcf stays importable
+  if (b64.length > 2_000_000) return null;
+
+  return foldVcardLine(`PHOTO;ENCODING=b;TYPE=${type}:${b64}`);
+}
+
 function makeSlug() {
   return randomBytes(6).toString('hex');
 }
@@ -124,6 +236,7 @@ export type SignatureDto = {
   logoUrl: string;
   directLine: string;
   cellPhone: string;
+  reportsTo: string;
   email: string;
   facebook: string;
   instagram: string;
@@ -157,6 +270,7 @@ function serialize(row: {
   logoUrl: string | null;
   directLine: string | null;
   cellPhone: string | null;
+  reportsTo: string | null;
   email: string | null;
   facebook: string | null;
   instagram: string | null;
@@ -188,6 +302,7 @@ function serialize(row: {
     logoUrl: row.logoUrl ?? '',
     directLine: row.directLine ?? '',
     cellPhone: row.cellPhone ?? '',
+    reportsTo: row.reportsTo ?? '',
     email: row.email ?? '',
     facebook: row.facebook ?? '',
     instagram: row.instagram ?? '',
@@ -221,6 +336,7 @@ function mapInput(input: SignatureInput) {
     logoUrl: stripMedia(input.logoUrl) || null,
     directLine: strip(input.directLine) || null,
     cellPhone: strip(input.cellPhone) || null,
+    reportsTo: strip(input.reportsTo) || null,
     email: strip(input.email) || null,
     facebook: strip(input.facebook, 300) || null,
     instagram: strip(input.instagram, 300) || null,
@@ -298,39 +414,67 @@ export async function getByShareSlug(slug: string) {
 }
 
 export function buildVcard(data: SignatureDto) {
-  const socials: Array<[SocialNetwork, string]> = [
-    ['facebook', normalizeSocial('facebook', data.facebook)],
-    ['instagram', normalizeSocial('instagram', data.instagram)],
-    ['linkedin', normalizeSocial('linkedin', data.linkedin)],
-    ['youtube', normalizeSocial('youtube', data.youtube)],
-    ['twitter', normalizeSocial('twitter', data.twitter)],
-  ].filter(([, url]) => Boolean(url)) as Array<[SocialNetwork, string]>;
+  const socialLabels: Record<SocialNetwork, string> = {
+    facebook: 'Facebook',
+    instagram: 'Instagram',
+    linkedin: 'LinkedIn',
+    youtube: 'YouTube',
+    twitter: 'Twitter',
+  };
+
+  const socials = (
+    [
+      ['facebook', data.facebook],
+      ['instagram', data.instagram],
+      ['linkedin', data.linkedin],
+      ['youtube', data.youtube],
+      ['twitter', data.twitter],
+    ] as const
+  )
+    .map(([network, value]) => {
+      const handle = socialHandle(network, value);
+      const url = normalizeSocial(network, value);
+      return handle && url ? { network, handle, url, label: socialLabels[network] } : null;
+    })
+    .filter((s): s is NonNullable<typeof s> => Boolean(s));
 
   const fullName = [data.firstName, data.lastName].filter(Boolean).join(' ');
+  const companyUrl = normalizeUrl(data.companyUrl);
   const website2 = normalizeUrl(data.website2);
   const customLink = normalizeUrl(data.customLinkUrl);
+
+  // Labeled URLs show the link in Apple Contacts; X-SOCIALPROFILE alone often
+  // blanks Instagram/YouTube (especially youtube.com/@ handles).
+  let urlItem = 1;
+  const labeledUrls: string[] = [];
+  const pushLabeledUrl = (label: string, url: string) => {
+    const n = urlItem++;
+    labeledUrls.push(`item${n}.URL:${escapeVcard(url)}`);
+    labeledUrls.push(`item${n}.X-ABLabel:${escapeVcard(label)}`);
+  };
+
+  if (companyUrl) pushLabeledUrl('work', companyUrl);
+  if (website2) pushLabeledUrl('website', website2);
+  if (customLink) pushLabeledUrl(data.customLinkLabel || 'Link', customLink);
+  for (const s of socials) pushLabeledUrl(s.label, s.url);
+
+  const photo = buildVcardPhoto(data.photoUrl);
 
   const lines = [
     'BEGIN:VCARD',
     'VERSION:3.0',
     `N:${escapeVcard(data.lastName)};${escapeVcard(data.firstName)};;;`,
     `FN:${escapeVcard(fullName)}`,
+    photo,
     `ORG:${escapeVcard(data.companyName)}`,
     data.jobTitle ? `TITLE:${escapeVcard(data.jobTitle)}` : null,
-    data.directLine ? `TEL;TYPE=WORK,VOICE:${escapeVcard(data.directLine)}` : null,
+    (data.reportsTo || data.directLine)
+      ? `TEL;TYPE=WORK,VOICE:${escapeVcard(data.reportsTo || data.directLine)}`
+      : null,
     data.cellPhone ? `TEL;TYPE=CELL,VOICE:${escapeVcard(data.cellPhone)}` : null,
     data.email ? `EMAIL;TYPE=INTERNET,WORK:${escapeVcard(data.email)}` : null,
     `ADR;TYPE=WORK:;;${escapeVcard(data.companyStreet)};${escapeVcard(data.companyCity)};${escapeVcard(data.companyRegion)};${escapeVcard(data.companyPostal)};`,
-    data.companyUrl ? `URL;TYPE=Work:${escapeVcard(data.companyUrl)}` : null,
-    website2 ? `URL;TYPE=Website:${escapeVcard(website2)}` : null,
-    customLink
-      ? `URL;TYPE=${escapeVcard(data.customLinkLabel || 'Link')}:${escapeVcard(customLink)}`
-      : null,
-    // One entry per social — avoid duplicating as both X-SOCIALPROFILE and URL
-    ...socials.map(
-      ([network, url]) =>
-        `X-SOCIALPROFILE;TYPE=${network === 'twitter' ? 'x' : network}:${escapeVcard(url)}`,
-    ),
+    ...labeledUrls,
     'END:VCARD',
   ].filter(Boolean);
 
@@ -350,6 +494,7 @@ export function previewFromInput(input: SignatureInput, sharePath = '/s/preview'
     logoUrl: mapped.logoUrl ?? '',
     directLine: mapped.directLine ?? '',
     cellPhone: mapped.cellPhone ?? '',
+    reportsTo: mapped.reportsTo ?? '',
     email: mapped.email ?? '',
     facebook: mapped.facebook ?? '',
     instagram: mapped.instagram ?? '',
@@ -416,6 +561,7 @@ export function buildSignatureHtml(
   const logo = escape(data.logoUrl);
   const initials = `${(data.firstName[0] || 'A').toUpperCase()}${(data.lastName[0] || 'P').toUpperCase()}`;
   const addressLines = formatSignatureAddress(data);
+  const directLine = (data.reportsTo.trim() || data.directLine.trim()).trim();
 
   const socials = (
     [
@@ -476,6 +622,21 @@ export function buildSignatureHtml(
               [
                 { text: data.cellPhone, color: '#111827', size: 11 },
                 { text: ' mobile', color: '#9ca3af', size: 10 },
+              ],
+            ],
+            { maxWidth: 168, lineHeight: 14 },
+          ),
+        )
+      : '',
+    directLine
+      ? contactRow(
+          'phone',
+          linkedText(
+            `tel:${directLine.replace(/[^\d+]/g, '')}`,
+            [
+              [
+                { text: directLine, color: '#111827', size: 11 },
+                { text: ' direct line', color: '#9ca3af', size: 10 },
               ],
             ],
             { maxWidth: 168, lineHeight: 14 },
