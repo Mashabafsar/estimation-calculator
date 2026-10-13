@@ -6,6 +6,7 @@ export type SignatureForm = {
   logoUrl: string;
   directLine: string;
   cellPhone: string;
+  reportsTo: string;
   email: string;
   facebook: string;
   instagram: string;
@@ -43,6 +44,7 @@ export const EMPTY_SIGNATURE: SignatureForm = {
   logoUrl: '',
   directLine: '',
   cellPhone: '',
+  reportsTo: '',
   email: '',
   facebook: '',
   instagram: '',
@@ -75,7 +77,19 @@ export function normalizeSocial(
 ) {
   const raw = value.trim();
   if (!raw) return '';
-  if (/^https?:\/\//i.test(raw)) return raw;
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+      return parsed.href;
+    } catch {
+      return '';
+    }
+  }
+
+  // Plain handles only — reject free-text / placeholder sentences
+  if (/\s/.test(raw) || raw.length > 64) return '';
   const handle = raw.replace(/^@/, '').replace(/^\/+/, '');
   if (!handle) return '';
   if (network === 'linkedin' && /^(in|company)\//i.test(handle)) {
@@ -235,84 +249,63 @@ function bakeEmailFonts(root: HTMLElement) {
   });
 }
 
-function copyViaContentEditable(html: string) {
-  const host = document.createElement('div');
-  host.setAttribute('contenteditable', 'true');
-  // Isolate from app page font (body is often 14–16px — Mail was inheriting that on paste)
-  host.style.cssText = [
-    'all:initial',
-    'position:fixed',
-    'left:0',
-    'top:0',
-    'width:400px',
-    'height:1px',
-    'opacity:0.01',
-    'overflow:hidden',
-    'z-index:-1',
-    'display:block',
-    'font-family:Arial,Helvetica,sans-serif',
-    'font-size:7pt',
-    'line-height:10pt',
-    'color:#111827',
-    '-webkit-text-size-adjust:none',
-  ].join(';');
-  host.innerHTML = html;
-  bakeEmailFonts(host);
-  document.body.appendChild(host);
+/** Keep a single signature table — strip doc wrappers that Gmail can paste twice. */
+function signatureFragment(html: string) {
+  const trimmed = html.trim();
+  if (!trimmed) return '';
 
-  host.focus();
-  const range = document.createRange();
-  range.selectNodeContents(host);
-  const selection = window.getSelection();
-  selection?.removeAllRanges();
-  selection?.addRange(range);
-
-  let ok = false;
-  try {
-    ok = document.execCommand('copy');
-  } finally {
-    selection?.removeAllRanges();
-    document.body.removeChild(host);
+  if (typeof document !== 'undefined') {
+    const doc = new DOMParser().parseFromString(trimmed, 'text/html');
+    // Serialize one outer card only. Do not return the original string even when
+    // it starts with a table: Safari can preserve a second adjacent fragment in
+    // clipboard HTML returned by some API responses.
+    const table = doc.body?.querySelector('table');
+    if (table) return table.outerHTML;
+    return (doc.body?.innerHTML || trimmed).trim();
   }
-  return ok;
+
+  const match = trimmed.match(/<table[\s\S]*<\/table>/i);
+  return match ? match[0] : trimmed;
 }
 
-/** Full HTML doc + pt sizes — Mail paste keeps these better than bare fragments with px. */
-function emailClipboardHtml(html: string) {
-  return (
-    `<!DOCTYPE html><html><head><meta charset="utf-8"></head>` +
-    `<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:7pt;line-height:10pt;color:#111827;-webkit-text-size-adjust:none;text-size-adjust:none;">` +
-    `<div style="font-family:Arial,Helvetica,sans-serif;font-size:7pt;line-height:10pt;color:#111827;-webkit-text-size-adjust:none;text-size-adjust:none;">${html}</div>` +
-    `</body></html>`
-  );
+function preparedSignatureHtml(fragmentHtml: string) {
+  const host = document.createElement('div');
+  host.innerHTML = fragmentHtml;
+  bakeEmailFonts(host);
+  const table = host.querySelector('table');
+  return (table ? table.outerHTML : host.innerHTML).trim();
 }
 
-/** Copy rich HTML so Gmail/Outlook/Apple Mail paste the rendered signature. */
+async function writeHtmlClipboard(payloadHtml: string) {
+  if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
+    return false;
+  }
+  const htmlBlob = new Blob([payloadHtml], { type: 'text/html' });
+  await navigator.clipboard.write([
+    new ClipboardItem({
+      'text/html': htmlBlob,
+    }),
+  ]);
+  return true;
+}
+
+/** Copy rich HTML so Gmail/Outlook/Apple Mail paste a single signature card. */
 export async function copyEmailSignatureHtml(html: string) {
-  const plain = htmlToPlainSignature(html) || 'Email signature';
-  const rich = emailClipboardHtml(html);
+  const fragment = signatureFragment(html);
+  const payload = preparedSignatureHtml(fragment);
+  if (!payload) {
+    await navigator.clipboard.writeText('Email signature');
+    return 'text';
+  }
+  const plain = htmlToPlainSignature(payload) || 'Email signature';
 
-  // Safari + Apple Mail: DOM selection copy keeps text/html on the clipboard.
   try {
-    if (copyViaContentEditable(rich)) return 'rich';
+    // One ClipboardItem with one representation. In particular, do not use
+    // execCommand('copy') here: Safari can append its own selected-page payload
+    // to the custom copy-event data, which Gmail then renders as a second card.
+    if (await writeHtmlClipboard(payload)) return 'rich';
   } catch {
     // fall through
-  }
-
-  if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
-    try {
-      const htmlBlob = new Blob([rich], { type: 'text/html' });
-      const plainBlob = new Blob([plain], { type: 'text/plain' });
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          'text/html': htmlBlob,
-          'text/plain': plainBlob,
-        }),
-      ]);
-      return 'rich';
-    } catch {
-      // fall through
-    }
   }
 
   await navigator.clipboard.writeText(plain);

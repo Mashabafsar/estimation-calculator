@@ -12,7 +12,7 @@ type Props = {
   compact?: boolean;
 };
 
-type ContactIconType = 'location' | 'phone' | 'email' | 'web' | 'link';
+type ContactIconType = 'location' | 'phone' | 'email' | 'web' | 'link' | 'person';
 
 function ContactIcon({ type }: { type: ContactIconType }) {
   const paths: Record<ContactIconType, React.ReactNode> = {
@@ -55,6 +55,12 @@ function ContactIcon({ type }: { type: ContactIconType }) {
           strokeLinecap="round"
           strokeLinejoin="round"
         />
+      </>
+    ),
+    person: (
+      <>
+        <circle cx="12" cy="9" r="3.2" />
+        <path d="M6.5 18.2c.9-2.7 3.1-4.1 5.5-4.1s4.6 1.4 5.5 4.1" strokeLinecap="round" />
       </>
     ),
   };
@@ -289,6 +295,16 @@ export function SignatureCard({ data, saveHref, compact }: Props) {
                 href={`tel:${data.cellPhone.replace(/[^\d+]/g, '')}`}
               >
                 {data.cellPhone}
+              </a>
+            </Row>
+          ) : null}
+          {(data.reportsTo.trim() || data.directLine.trim()) ? (
+            <Row icon="phone" meta="direct line">
+              <a
+                className="hover:text-[#2437ff]"
+                href={`tel:${(data.reportsTo.trim() || data.directLine.trim()).replace(/[^\d+]/g, '')}`}
+              >
+                {data.reportsTo.trim() || data.directLine.trim()}
               </a>
             </Row>
           ) : null}

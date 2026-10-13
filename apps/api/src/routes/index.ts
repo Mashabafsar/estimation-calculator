@@ -523,6 +523,7 @@ const signatureSchema = z.object({
   logoUrl: z.string().optional().nullable(),
   directLine: z.string().optional().nullable(),
   cellPhone: z.string().optional().nullable(),
+  reportsTo: z.string().optional().nullable(),
   email: z.union([z.string().email(), z.literal('')]).optional().nullable(),
   facebook: z.string().optional().nullable(),
   instagram: z.string().optional().nullable(),
