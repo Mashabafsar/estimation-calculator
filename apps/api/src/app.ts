@@ -11,7 +11,8 @@ export function createApp() {
   const app = express();
   app.use(helmet());
   app.use(cors({ origin: config.corsOrigin, credentials: true }));
-  app.use(express.json({ limit: '15mb' }));
+  // Photo + logo as base64 can each expand ~4/3 past the 10MB file limit.
+  app.use(express.json({ limit: '30mb' }));
 
   app.use(morgan(config.env === 'production' ? 'combined' : 'dev'));
   app.use(auditLog);

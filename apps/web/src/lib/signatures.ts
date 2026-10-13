@@ -188,14 +188,14 @@ export function socialCardRows(data: SignatureForm) {
   return rows;
 }
 
-export function readImageFile(file: File, maxBytes = 1_800_000): Promise<string> {
+export function readImageFile(file: File, maxBytes = 10_000_000): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith('image/')) {
       reject(new Error('Please choose an image file'));
       return;
     }
     if (file.size > maxBytes) {
-      reject(new Error('Image must be under 1.8MB'));
+      reject(new Error('Image must be under 10MB'));
       return;
     }
     const reader = new FileReader();
