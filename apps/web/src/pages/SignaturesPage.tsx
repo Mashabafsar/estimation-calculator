@@ -66,7 +66,7 @@ export function SignaturesPage() {
         <div>
           <h1 className="page-title">E-Signature</h1>
           <p className="page-subtitle">
-            Manage HiHello-style email signature cards, share links, and copy for email.
+            Manage email signature cards, share links, and copy for email.
           </p>
         </div>
         <Link to="/signatures/new" className="btn btn-primary">
