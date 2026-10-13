@@ -18,7 +18,7 @@ RUN npx prisma generate && npm run build
 
 FROM node:20-alpine
 WORKDIR /app
-RUN apk add --no-cache openssl netcat-openbsd
+RUN apk add --no-cache openssl netcat-openbsd font-dejavu
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./

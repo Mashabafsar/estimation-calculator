@@ -365,15 +365,15 @@ export function SignatureCard({ data, saveHref, compact }: Props) {
         </ul>
       </div>
 
-      <footer className="flex items-start justify-between border-t border-[#eef1f5] pl-3.5 pr-0 pb-0 pt-0">
-        <div className="flex flex-wrap items-center gap-3.5 self-center py-2.5">
+      <footer className="flex h-10 items-center border-t border-[#eef1f5] pl-3.5 pr-0">
+        <div className="flex min-w-0 flex-1 items-center gap-3.5">
           {socials.map((s) => (
             <a
               key={s.network}
               href={s.url}
               target="_blank"
               rel="noreferrer"
-              className="text-[#111827] hover:text-[#2437ff] transition-colors"
+              className="inline-flex text-[#111827] transition-colors hover:text-[#2437ff]"
               aria-label={s.label}
             >
               <SocialIcon network={s.network} />
@@ -383,12 +383,12 @@ export function SignatureCard({ data, saveHref, compact }: Props) {
         {saveHref ? (
           <a
             href={saveHref}
-            className="inline-flex shrink-0 items-center justify-center rounded-tl-[20px] rounded-br-2xl bg-[#2437ff] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:brightness-110"
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-tl-[20px] rounded-br-2xl bg-[#2437ff] px-4 text-[10px] font-bold uppercase leading-none tracking-[0.08em] text-white hover:brightness-110"
           >
             Save Contact
           </a>
         ) : (
-          <div className="inline-flex shrink-0 items-center justify-center rounded-tl-[20px] rounded-br-2xl bg-[#2437ff] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.08em] text-white">
+          <div className="inline-flex h-10 shrink-0 items-center justify-center rounded-tl-[20px] rounded-br-2xl bg-[#2437ff] px-4 text-[10px] font-bold uppercase leading-none tracking-[0.08em] text-white">
             Save Contact
           </div>
         )}

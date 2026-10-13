@@ -587,7 +587,7 @@ router.post(
     res.json({
       success: true,
       data: {
-        html: signaturesService.buildSignatureHtml(preview, { cardUrl, assetBase: origin }),
+        html: await signaturesService.buildSignatureImageHtml(preview, { cardUrl }),
         shareUrl: cardUrl,
       },
     });
@@ -608,7 +608,7 @@ router.post(
       data: {
         ...saved,
         shareUrl: cardUrl,
-        html: signaturesService.buildSignatureHtml(saved, { cardUrl, assetBase: origin }),
+        html: await signaturesService.buildSignatureImageHtml(saved, { cardUrl }),
       },
     });
   }),
@@ -629,7 +629,7 @@ router.put(
       data: {
         ...saved,
         shareUrl: cardUrl,
-        html: signaturesService.buildSignatureHtml(saved, { cardUrl, assetBase: origin }),
+        html: await signaturesService.buildSignatureImageHtml(saved, { cardUrl }),
       },
     });
   }),
