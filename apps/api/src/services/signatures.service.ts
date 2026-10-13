@@ -8,6 +8,7 @@ import {
   SIGNATURE_ICON_SVGS,
   type SignatureIconName,
 } from './signature-icons.js';
+import { resolveImageDataUrl } from './signature-media.service.js';
 
 function formatSignatureAddress(data: {
   companyStreet: string;
@@ -70,7 +71,11 @@ function strip(value?: string | null, max = 200) {
 function stripMedia(value?: string | null) {
   const raw = (value ?? '').trim();
   if (!raw) return '';
-  if (raw.startsWith('data:image/') || /^https?:\/\//i.test(raw)) {
+  if (
+    raw.startsWith('data:image/') ||
+    /^https?:\/\//i.test(raw) ||
+    raw.startsWith('/api/uploads/signatures/')
+  ) {
     return raw.slice(0, IMAGE_MAX);
   }
   return '';
@@ -181,11 +186,11 @@ function vcardPhotoType(mime: string) {
 }
 
 /** Extract a Contacts-compatible PHOTO line (Apple ignores SVG). */
-function buildVcardPhoto(photoUrl?: string | null): string | null {
+async function buildVcardPhoto(photoUrl?: string | null): Promise<string | null> {
   const raw = (photoUrl ?? '').trim();
   if (!raw) return null;
 
-  if (/^https?:\/\//i.test(raw)) {
+  if (/^https?:\/\//i.test(raw) && !raw.includes('/api/uploads/signatures/')) {
     try {
       const parsed = new URL(raw);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
@@ -195,7 +200,8 @@ function buildVcardPhoto(photoUrl?: string | null): string | null {
     }
   }
 
-  const dataMatch = raw.match(/^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/i);
+  const dataUrl = raw.startsWith('data:image/') ? raw : await resolveImageDataUrl(raw);
+  const dataMatch = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=\s]+)$/i);
   if (!dataMatch) return null;
 
   let mime = dataMatch[1].toLowerCase();
@@ -413,7 +419,7 @@ export async function getByShareSlug(slug: string) {
   return serialize(row);
 }
 
-export function buildVcard(data: SignatureDto) {
+export async function buildVcard(data: SignatureDto) {
   const socialLabels: Record<SocialNetwork, string> = {
     facebook: 'Facebook',
     instagram: 'Instagram',
@@ -458,7 +464,7 @@ export function buildVcard(data: SignatureDto) {
   if (customLink) pushLabeledUrl(data.customLinkLabel || 'Link', customLink);
   for (const s of socials) pushLabeledUrl(s.label, s.url);
 
-  const photo = buildVcardPhoto(data.photoUrl);
+  const photo = await buildVcardPhoto(data.photoUrl);
 
   const lines = [
     'BEGIN:VCARD',
@@ -531,6 +537,46 @@ function svgImage(svg: string) {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
+/** Keep contact-column text inside its half so long streets don't cover the right icons. */
+function fitContactLines(text: string, maxChars: number, maxLines: number) {
+  const words = text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  if (!words.length) return [] as string[];
+
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= maxChars) {
+      current = next;
+      continue;
+    }
+    if (current) lines.push(current);
+    if (word.length > maxChars) {
+      lines.push(`${word.slice(0, Math.max(1, maxChars - 1))}…`);
+      current = '';
+    } else {
+      current = word;
+    }
+    if (lines.length >= maxLines) {
+      current = '';
+      break;
+    }
+  }
+  if (current && lines.length < maxLines) lines.push(current);
+  if (lines.length === maxLines) {
+    const used = lines.join(' ').length;
+    const full = words.join(' ');
+    if (used < full.length) {
+      const last = lines[maxLines - 1];
+      lines[maxLines - 1] =
+        last.length >= maxChars
+          ? `${last.slice(0, Math.max(1, maxChars - 1)).trimEnd()}…`
+          : `${last.replace(/…$/, '').trimEnd()}…`;
+    }
+  }
+  return lines;
+}
+
 /** HiHello-style email signature: one raster image, one card link. */
 export async function buildSignatureImageHtml(
   data: SignatureDto,
@@ -548,9 +594,9 @@ export async function buildSignatureImageHtml(
     : data.companyName.slice(0, 2) || 'CO'
   ).toUpperCase();
 
-  const rasterOrSvg = (value: string) => (/^data:image\//i.test(value.trim()) ? value.trim() : '');
-  const photo = rasterOrSvg(data.photoUrl);
-  const logo = rasterOrSvg(data.logoUrl);
+  // Keep embeds small — librsvg rejects huge base64 data URLs inside the card SVG.
+  const photo = await resolveImageDataUrl(data.photoUrl, { maxEdge: 224 });
+  const logo = await resolveImageDataUrl(data.logoUrl, { maxEdge: 160 });
   const iconHref = (name: SignatureIconName) => svgImage(SIGNATURE_ICON_SVGS[name]);
   const icon = (name: SignatureIconName, x: number, y: number, size = 36) =>
     `<image href="${iconHref(name)}" x="${x}" y="${y}" width="${size}" height="${size}"/>`;
@@ -576,16 +622,40 @@ export async function buildSignatureImageHtml(
   if (data.website2) rightRows.push(['web', displayUrlLabel(data.website2) || data.website2]);
   if (customLabel) rightRows.push(['link', customLabel]);
 
+  // Left column text ends before right icons (x≈430). ~26 chars @ 22px DejaVu.
+  const LEFT_CHARS = 26;
+  const RIGHT_CHARS = 28;
   const leftSvg = leftRows
     .map(([name, line1, line2], i) => {
       const y = 202 + i * 58;
-      return `${icon(name, 32, y - 25)}<text x="82" y="${y}" class="body">${xml(line1)}</text>${line2 ? `<text x="82" y="${y + 25}" class="muted">${xml(line2)}</text>` : ''}`;
+      // Address keeps a city line — wrap street to 1 line; other rows can use 2.
+      const streetLines = fitContactLines(line1, LEFT_CHARS, line2 ? 1 : 2);
+      const body = streetLines
+        .map(
+          (line, li) =>
+            `<text x="82" y="${y + li * 22}" class="body">${xml(line)}</text>`,
+        )
+        .join('');
+      const city =
+        line2
+          ? `<text x="82" y="${y + streetLines.length * 22}" class="muted">${xml(
+              fitContactLines(line2, LEFT_CHARS, 1)[0] || line2,
+            )}</text>`
+          : '';
+      return `${icon(name, 32, y - 25)}${body}${city}`;
     })
     .join('');
   const rightSvg = rightRows
     .map(([name, label], i) => {
       const y = 202 + i * 58;
-      return `${icon(name, 430, y - 25)}<text x="480" y="${y}" class="body">${xml(label)}</text>`;
+      const lines = fitContactLines(label, RIGHT_CHARS, 2);
+      const body = lines
+        .map(
+          (line, li) =>
+            `<text x="480" y="${y + li * 22}" class="body">${xml(line)}</text>`,
+        )
+        .join('');
+      return `${icon(name, 430, y - 25)}${body}`;
     })
     .join('');
   // Footer band: break line at y=390 → card bottom at y=480 (90px). Icons centered; Save flush to line.

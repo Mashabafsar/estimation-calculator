@@ -7,7 +7,7 @@ import { SignatureCard } from '../components/SignatureCard';
 import {
   EMPTY_SIGNATURE,
   copyEmailSignatureHtml,
-  readImageFile,
+  uploadSignatureImage,
   type SavedSignature,
   type SignatureForm,
 } from '../lib/signatures';
@@ -47,15 +47,18 @@ function ImageField({
   value,
   onChange,
   onClear,
+  token,
   variant = 'photo',
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   onClear: () => void;
+  token: string;
   variant?: 'photo' | 'logo';
 }) {
   const isLogo = variant === 'logo';
+  const [uploading, setUploading] = useState(false);
 
   return (
     <div className="space-y-2 text-sm">
@@ -100,19 +103,24 @@ function ImageField({
             onChange={(e) => onChange(e.target.value)}
           />
           <div className="flex gap-2">
-            <label className="btn btn-ghost cursor-pointer">
-              Upload
+            <label className={`btn btn-ghost cursor-pointer ${uploading ? 'opacity-65 pointer-events-none' : ''}`}>
+              {uploading ? 'Uploading…' : 'Upload'}
               <input
                 type="file"
                 accept="image/*"
                 className="hidden"
+                disabled={uploading || !token}
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
+                  e.target.value = '';
                   if (!file) return;
                   try {
-                    onChange(await readImageFile(file));
+                    setUploading(true);
+                    onChange(await uploadSignatureImage(file, token));
                   } catch (err: any) {
                     alert(err?.message || 'Upload failed');
+                  } finally {
+                    setUploading(false);
                   }
                 }}
               />
@@ -313,6 +321,7 @@ export function SignaturesPage() {
                 value={form.photoUrl}
                 onChange={(v) => update('photoUrl', v)}
                 onClear={() => update('photoUrl', '')}
+                token={token || ''}
               />
               <ImageField
                 label="Company logo"
@@ -320,6 +329,7 @@ export function SignaturesPage() {
                 value={form.logoUrl}
                 onChange={(v) => update('logoUrl', v)}
                 onClear={() => update('logoUrl', '')}
+                token={token || ''}
               />
             </div>
           </section>

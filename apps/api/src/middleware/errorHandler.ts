@@ -10,6 +10,14 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     });
   }
 
+  const anyErr = err as { type?: string; status?: number; statusCode?: number; message?: string };
+  if (anyErr?.type === 'entity.too.large' || anyErr?.status === 413 || anyErr?.statusCode === 413) {
+    return res.status(413).json({
+      success: false,
+      message: 'Image must be under 10MB',
+    });
+  }
+
   console.error(err);
   return res.status(500).json({
     success: false,
