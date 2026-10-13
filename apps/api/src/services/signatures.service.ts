@@ -23,7 +23,8 @@ function formatSignatureAddress(data: {
   return [street ? `${street} work` : '', cityLine].filter(Boolean);
 }
 
-const IMAGE_MAX = 2_500_000;
+/** Max data-URL length for photo/logo (~10MB file as base64 + prefix). */
+const IMAGE_MAX = 14_000_000;
 
 export type SignatureInput = {
   firstName: string;
