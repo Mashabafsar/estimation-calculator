@@ -36,6 +36,35 @@ export type SavedSignature = SignatureForm & {
   updatedAt: string;
 };
 
+export function formFromSavedSignature(row: SavedSignature): SignatureForm {
+  return {
+    firstName: row.firstName,
+    lastName: row.lastName,
+    jobTitle: row.jobTitle,
+    photoUrl: row.photoUrl || '',
+    logoUrl: row.logoUrl || '',
+    directLine: '',
+    cellPhone: row.cellPhone,
+    reportsTo: row.reportsTo || row.directLine || '',
+    email: row.email,
+    facebook: row.facebook,
+    instagram: row.instagram,
+    linkedin: row.linkedin,
+    youtube: row.youtube,
+    twitter: row.twitter,
+    website2: row.website2 || '',
+    customLinkLabel: row.customLinkLabel || 'Join our Facebook Group',
+    customLinkUrl: row.customLinkUrl || '',
+    companyName: row.companyName,
+    companyUrl: row.companyUrl,
+    companyStreet: row.companyStreet,
+    companyCity: row.companyCity,
+    companyRegion: row.companyRegion,
+    companyPostal: row.companyPostal,
+    tagline: row.tagline,
+  };
+}
+
 export const EMPTY_SIGNATURE: SignatureForm = {
   firstName: '',
   lastName: '',

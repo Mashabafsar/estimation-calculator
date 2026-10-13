@@ -244,17 +244,6 @@ export function SharedSignaturePage() {
             </ContactRow>
           ) : null}
 
-          {((data.reportsTo || data.directLine || '').trim()) ? (
-            <ContactRow
-              icon="office"
-              meta="direct line"
-              index={nextIndex()}
-              href={`tel:${(data.reportsTo || data.directLine || '').trim().replace(/[^\d+]/g, '')}`}
-            >
-              {(data.reportsTo || data.directLine || '').trim()}
-            </ContactRow>
-          ) : null}
-
           {data.email ? (
             <ContactRow icon="email" index={nextIndex()} href={`mailto:${data.email}`}>
               {data.email}
