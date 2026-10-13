@@ -1,12 +1,11 @@
 import { randomBytes } from 'node:crypto';
+import sharp from 'sharp';
 import { prisma } from '../utils/prisma.js';
 import { AppError } from '../utils/errors.js';
 import {
   SAVE_CONTACT_BTN_DATA_URI,
   SIGNATURE_ICON_DATA_URIS,
-  avatarInitialsDataUri,
-  logoMonogramDataUri,
-  signatureTextImage,
+  SIGNATURE_ICON_SVGS,
   type SignatureIconName,
 } from './signature-icons.js';
 
@@ -519,6 +518,112 @@ export function previewFromInput(input: SignatureInput, sharePath = '/s/preview'
   };
 }
 
+function xml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function svgImage(svg: string) {
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+}
+
+/** HiHello-style email signature: one raster image, one card link. */
+export async function buildSignatureImageHtml(
+  data: SignatureDto,
+  opts: { cardUrl: string },
+) {
+  const fullName = [data.firstName, data.lastName].filter(Boolean).join(' ') || 'Your Name';
+  const address = formatSignatureAddress(data);
+  const directLine = (data.reportsTo.trim() || data.directLine.trim()).trim();
+  const companyUrl = displayUrlLabel(data.companyUrl) || data.companyUrl;
+  const customLabel = data.customLinkLabel || displayUrlLabel(data.customLinkUrl);
+  const initials = `${data.firstName[0] || 'A'}${data.lastName[0] || 'P'}`.toUpperCase();
+  const monoParts = data.companyName.trim().split(/\s+/).filter(Boolean);
+  const mono = (monoParts.length > 1
+    ? `${monoParts[0][0] || ''}${monoParts[1][0] || ''}`
+    : data.companyName.slice(0, 2) || 'CO'
+  ).toUpperCase();
+
+  const rasterOrSvg = (value: string) => (/^data:image\//i.test(value.trim()) ? value.trim() : '');
+  const photo = rasterOrSvg(data.photoUrl);
+  const logo = rasterOrSvg(data.logoUrl);
+  const iconHref = (name: SignatureIconName) => svgImage(SIGNATURE_ICON_SVGS[name]);
+  const icon = (name: SignatureIconName, x: number, y: number, size = 36) =>
+    `<image href="${iconHref(name)}" x="${x}" y="${y}" width="${size}" height="${size}"/>`;
+
+  const socials = (
+    [
+      ['facebook', data.facebook],
+      ['instagram', data.instagram],
+      ['linkedin', data.linkedin],
+      ['youtube', data.youtube],
+      ['twitter', data.twitter],
+    ] as const
+  ).filter(([network, value]) => normalizeSocial(network, value));
+
+  const leftRows: Array<[SignatureIconName, string, string]> = [];
+  if (address.length) leftRows.push(['location', address[0], address[1] || '']);
+  if (data.cellPhone) leftRows.push(['phone', `${data.cellPhone}  mobile`, '']);
+  if (directLine) leftRows.push(['phone', `${directLine}  direct line`, '']);
+  if (data.email) leftRows.push(['email', data.email, '']);
+
+  const rightRows: Array<[SignatureIconName, string]> = [];
+  if (companyUrl) rightRows.push(['web', companyUrl]);
+  if (data.website2) rightRows.push(['web', displayUrlLabel(data.website2) || data.website2]);
+  if (customLabel) rightRows.push(['link', customLabel]);
+
+  const leftSvg = leftRows
+    .map(([name, line1, line2], i) => {
+      const y = 202 + i * 58;
+      return `${icon(name, 32, y - 25)}<text x="82" y="${y}" class="body">${xml(line1)}</text>${line2 ? `<text x="82" y="${y + 25}" class="muted">${xml(line2)}</text>` : ''}`;
+    })
+    .join('');
+  const rightSvg = rightRows
+    .map(([name, label], i) => {
+      const y = 202 + i * 58;
+      return `${icon(name, 430, y - 25)}<text x="480" y="${y}" class="body">${xml(label)}</text>`;
+    })
+    .join('');
+  // Footer band: break line at y=390 → card bottom at y=480 (90px). Icons centered; Save flush to line.
+  const footerTop = 390;
+  const footerBottom = 480;
+  const socialSize = 30;
+  const socialY = footerTop + Math.round((footerBottom - footerTop - socialSize) / 2);
+  const socialSvg = socials
+    .map(([name], i) => icon(name, 34 + i * 52, socialY, socialSize))
+    .join('');
+
+  const photoSvg = photo
+    ? `<clipPath id="photoClip"><rect x="32" y="28" width="112" height="112" rx="24"/></clipPath><image href="${xml(photo)}" x="32" y="28" width="112" height="112" preserveAspectRatio="xMidYMid slice" clip-path="url(#photoClip)"/>`
+    : `<rect x="32" y="28" width="112" height="112" rx="24" fill="#2437ff"/><text x="88" y="97" text-anchor="middle" class="initials">${xml(initials)}</text>`;
+  const logoSvg = logo
+    ? `<circle cx="710" cy="84" r="58" fill="#16a34a"/><circle cx="710" cy="84" r="50" fill="#fff"/><image href="${xml(logo)}" x="674" y="48" width="72" height="72" preserveAspectRatio="xMidYMid meet"/>`
+    : `<circle cx="710" cy="84" r="58" fill="#16a34a"/><circle cx="710" cy="84" r="50" fill="#fff"/><text x="710" y="94" text-anchor="middle" class="mono">${xml(mono)}</text>`;
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480">
+    <style>.body{font:22px 'DejaVu Sans',Arial,sans-serif;fill:#111827}.muted{font:20px 'DejaVu Sans',Arial,sans-serif;fill:#4b5563}.initials{font:700 32px 'DejaVu Sans',Arial,sans-serif;fill:#fff}.mono{font:800 26px 'DejaVu Sans',Arial,sans-serif;fill:#2437ff}</style>
+    <rect x="1" y="1" width="798" height="478" rx="28" fill="#fff" stroke="#d5dae3" stroke-width="2"/>
+    ${photoSvg}${logoSvg}
+    <text x="176" y="62" style="font:700 30px 'DejaVu Sans',Arial,sans-serif;fill:#0f172a">${xml(fullName)}</text>
+    <text x="176" y="94" style="font:24px 'DejaVu Sans',Arial,sans-serif;fill:#1f2937">${xml(data.jobTitle)}</text>
+    <text x="176" y="124" style="font:italic 23px 'DejaVu Sans',Arial,sans-serif;fill:#6b7280">${xml(data.companyName)}</text>
+    <line x1="1" y1="158" x2="799" y2="158" stroke="#eef1f5" stroke-width="2"/>
+    ${leftSvg}${rightSvg}
+    <line x1="1" y1="${footerTop}" x2="799" y2="${footerTop}" stroke="#eef1f5" stroke-width="2"/>
+    ${socialSvg}
+    <path d="M570 ${footerTop}H800V448C800 466 786 480 768 480H540V420C540 403 553 ${footerTop} 570 ${footerTop}Z" fill="#2437ff"/>
+    <text x="670" y="445" text-anchor="middle" style="font:700 20px 'DejaVu Sans',Arial,sans-serif;letter-spacing:1.5px;fill:#fff">SAVE CONTACT</text>
+  </svg>`;
+
+  const png = await sharp(Buffer.from(svg)).png().toBuffer();
+  const src = `data:image/png;base64,${png.toString('base64')}`;
+  const alt = `${fullName}. ${data.jobTitle}. ${data.companyName}. ${data.email}. ${data.cellPhone}. ${directLine}`;
+  return `<a href="${xml(opts.cardUrl)}" style="display:inline-block;text-decoration:none;border:0;"><img src="${src}" width="400" height="240" alt="${xml(alt)}" border="0" style="display:block;width:400px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;" /></a>`;
+}
+
 export function buildSignatureHtml(
   data: SignatureDto,
   opts: { cardUrl: string; assetBase: string },
@@ -526,23 +631,20 @@ export function buildSignatureHtml(
   const escape = (v: string) =>
     v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-  // Text as SVG <img> — Mail/Gmail ignore CSS font-size on paste; images keep exact size
-  const textImg = (
-    lines: Parameters<typeof signatureTextImage>[0],
-    imgOpts?: Parameters<typeof signatureTextImage>[1],
+  // Use real text. Gmail strips data: SVG images after an email is sent, which
+  // made text-as-SVG labels appear as empty boxes in the received message.
+  const text = (
+    value: string,
+    options: { color?: string; size?: number; weight?: number; italic?: boolean } = {},
   ) => {
-    const img = signatureTextImage(lines, imgOpts);
-    return `<img src="${img.src}" width="${img.width}" height="${img.height}" alt="${escape(img.alt)}" border="0" style="display:block;border:0;outline:none;text-decoration:none;width:${img.width}px;height:${img.height}px;" />`;
+    const color = options.color || '#111827';
+    const size = options.size || 11;
+    const weight = options.weight || 400;
+    return `<span style="font-family:Arial,Helvetica,sans-serif;font-size:${size}px;line-height:${size + 3}px;color:${color};font-weight:${weight};${options.italic ? 'font-style:italic;' : ''}">${escape(value)}</span>`;
   };
 
-  const linkedText = (
-    href: string,
-    lines: Parameters<typeof signatureTextImage>[0],
-    imgOpts?: Parameters<typeof signatureTextImage>[1],
-  ) => {
-    const img = signatureTextImage(lines, imgOpts);
-    return `<a href="${escape(href)}" style="text-decoration:none;border:0;outline:none;"><img src="${img.src}" width="${img.width}" height="${img.height}" alt="${escape(img.alt)}" border="0" style="display:block;border:0;outline:none;text-decoration:none;width:${img.width}px;height:${img.height}px;" /></a>`;
-  };
+  const linkedText = (href: string, valueHtml: string) =>
+    `<a href="${escape(href)}" style="font-family:Arial,Helvetica,sans-serif;text-decoration:none;color:#111827;border:0;outline:none;">${valueHtml}</a>`;
 
   const fullNameRaw = [data.firstName, data.lastName].filter(Boolean).join(' ') || 'Your Name';
   const jobTitleRaw = data.jobTitle || 'Job title';
@@ -550,9 +652,6 @@ export function buildSignatureHtml(
   const fullName = escape(fullNameRaw);
   const company = escape(companyRaw);
   const cardUrl = escape(opts.cardUrl);
-  const assetBase = opts.assetBase.replace(/\/$/, '');
-  const icon = (name: SignatureIconName) =>
-    SIGNATURE_ICON_DATA_URIS[name] || `${assetBase}/esignature/icons/${name}.svg`;
   const companyUrl = normalizeUrl(data.companyUrl);
   const website2Url = normalizeUrl(data.website2);
   const customUrl = normalizeUrl(data.customLinkUrl);
@@ -585,72 +684,50 @@ export function buildSignatureHtml(
     `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
       <tr>
         <td width="22" valign="top" style="width:22px;padding:0 8px 8px 0;">
-          <img src="${icon(iconName)}" width="18" height="18" alt="" border="0" style="display:block;border:0;outline:none;text-decoration:none;width:18px;height:18px;" />
+          <img src="${SIGNATURE_ICON_DATA_URIS[iconName]}" width="18" height="18" alt="" border="0" style="display:block;border:0;outline:none;text-decoration:none;width:18px;height:18px;" />
         </td>
-        <td valign="top" style="padding:1px 0 8px 0;line-height:0;font-size:0;">
+        <td valign="top" style="padding:2px 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:14px;color:#111827;">
           ${content}
         </td>
       </tr>
     </table>`;
 
-  const addressImg = addressLines.length
-    ? textImg(
-        addressLines.map((line, i) => {
+  const addressHtml = addressLines.length
+    ? addressLines
+        .map((line, i) => {
           const isLast = i === addressLines.length - 1 && addressLines.length > 1;
           const workIdx = line.lastIndexOf(' work');
           const hasWork = workIdx > 0 && workIdx === line.length - 5;
+          const color = isLast ? '#4b5563' : '#111827';
           if (hasWork) {
-            return [
-              { text: line.slice(0, workIdx), color: isLast ? '#4b5563' : '#111827', size: 11 },
-              { text: ' work', color: '#9ca3af', size: 10 },
-            ];
+            return `${text(line.slice(0, workIdx), { color })}${text(' work', { color: '#9ca3af', size: 10 })}`;
           }
-          return [{ text: line, color: isLast ? '#4b5563' : '#111827', size: 11 }];
-        }),
-        { maxWidth: 168, lineHeight: 14 },
-      )
+          return text(line, { color });
+        })
+        .join('<br />')
     : '';
 
+  const withMeta = (value: string, meta: string) =>
+    `${text(value)}${text(` ${meta}`, { color: '#9ca3af', size: 10 })}`;
+
   const leftRows = [
-    addressImg ? contactRow('location', addressImg) : '',
+    addressHtml ? contactRow('location', addressHtml) : '',
     data.cellPhone
       ? contactRow(
           'phone',
-          linkedText(
-            `tel:${data.cellPhone.replace(/[^\d+]/g, '')}`,
-            [
-              [
-                { text: data.cellPhone, color: '#111827', size: 11 },
-                { text: ' mobile', color: '#9ca3af', size: 10 },
-              ],
-            ],
-            { maxWidth: 168, lineHeight: 14 },
-          ),
+          linkedText(`tel:${data.cellPhone.replace(/[^\d+]/g, '')}`, withMeta(data.cellPhone, 'mobile')),
         )
       : '',
     directLine
       ? contactRow(
           'phone',
-          linkedText(
-            `tel:${directLine.replace(/[^\d+]/g, '')}`,
-            [
-              [
-                { text: directLine, color: '#111827', size: 11 },
-                { text: ' direct line', color: '#9ca3af', size: 10 },
-              ],
-            ],
-            { maxWidth: 168, lineHeight: 14 },
-          ),
+          linkedText(`tel:${directLine.replace(/[^\d+]/g, '')}`, withMeta(directLine, 'direct line')),
         )
       : '',
     data.email
       ? contactRow(
           'email',
-          linkedText(
-            `mailto:${data.email.trim()}`,
-            [[{ text: data.email.trim(), color: '#111827', size: 11 }]],
-            { maxWidth: 168, lineHeight: 14 },
-          ),
+          linkedText(`mailto:${data.email.trim()}`, text(data.email.trim())),
         )
       : '',
   ]
@@ -664,77 +741,26 @@ export function buildSignatureHtml(
           companyUrl
             ? linkedText(
                 companyUrl,
-                [
-                  [
-                    {
-                      text: displayUrlLabel(data.companyUrl) || displayUrlLabel(companyUrl) || 'website',
-                      color: '#111827',
-                      size: 11,
-                    },
-                  ],
-                ],
-                { maxWidth: 168, lineHeight: 14 },
+                text(displayUrlLabel(data.companyUrl) || displayUrlLabel(companyUrl) || 'website'),
               )
-            : textImg(
-                [
-                  [
-                    {
-                      text: displayUrlLabel(data.companyUrl) || data.companyUrl.trim() || 'website',
-                      color: '#111827',
-                      size: 11,
-                    },
-                  ],
-                ],
-                { maxWidth: 168, lineHeight: 14 },
-              ),
+            : text(displayUrlLabel(data.companyUrl) || data.companyUrl.trim() || 'website'),
         )
       : '',
     data.website2.trim()
       ? contactRow(
           'web',
           website2Url
-            ? linkedText(
-                website2Url,
-                [[{ text: displayUrlLabel(data.website2), color: '#111827', size: 11 }]],
-                { maxWidth: 168, lineHeight: 14 },
-              )
-            : textImg(
-                [[{ text: displayUrlLabel(data.website2), color: '#111827', size: 11 }]],
-                { maxWidth: 168, lineHeight: 14 },
-              ),
+            ? linkedText(website2Url, text(displayUrlLabel(data.website2)))
+            : text(displayUrlLabel(data.website2)),
         )
       : '',
     data.customLinkLabel.trim() || data.customLinkUrl.trim()
       ? contactRow(
           'link',
           customUrl
-            ? linkedText(
-                customUrl,
-                [
-                  [
-                    {
-                      text: customLabel || displayUrlLabel(data.customLinkUrl),
-                      color: '#111827',
-                      size: 11,
-                    },
-                  ],
-                ],
-                { maxWidth: 168, lineHeight: 14 },
-              )
-            : textImg(
-                [
-                  [
-                    {
-                      text:
-                        customLabel ||
-                        displayUrlLabel(data.customLinkUrl) ||
-                        data.customLinkUrl.trim(),
-                      color: '#111827',
-                      size: 11,
-                    },
-                  ],
-                ],
-                { maxWidth: 168, lineHeight: 14 },
+            ? linkedText(customUrl, text(customLabel || displayUrlLabel(data.customLinkUrl)))
+            : text(
+                customLabel || displayUrlLabel(data.customLinkUrl) || data.customLinkUrl.trim(),
               ),
         )
       : '',
@@ -743,20 +769,14 @@ export function buildSignatureHtml(
     .join('');
 
   const nameBlock = [
-    textImg([[{ text: fullNameRaw, color: '#0f172a', size: 13, weight: 700 }]], {
-      maxWidth: 220,
-      lineHeight: 16,
-    }),
-    textImg([[{ text: jobTitleRaw, color: '#1f2937', size: 11 }]], { maxWidth: 220, lineHeight: 14 }),
-    textImg([[{ text: companyRaw, color: '#6b7280', size: 11, italic: true }]], {
-      maxWidth: 220,
-      lineHeight: 14,
-    }),
+    `<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:16px;font-weight:700;color:#0f172a;">${text(fullNameRaw, { color: '#0f172a', size: 13, weight: 700 })}</div>`,
+    `<div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:14px;color:#1f2937;">${text(jobTitleRaw, { color: '#1f2937' })}</div>`,
+    `<div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:14px;color:#6b7280;font-style:italic;">${text(companyRaw, { color: '#6b7280', italic: true })}</div>`,
   ].join('');
 
   const photoCell = photo
     ? `<img src="${photo}" width="56" height="56" alt="" border="0" style="display:block;border:0;width:56px;height:56px;border-radius:12px;" />`
-    : `<img src="${avatarInitialsDataUri(initials)}" width="56" height="56" alt="${fullName}" border="0" style="display:block;border:0;width:56px;height:56px;" />`;
+    : `<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td width="56" height="56" align="center" valign="middle" bgcolor="#2437ff" style="width:56px;height:56px;background:#2437ff;border-radius:12px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:700;color:#ffffff;">${escape(initials)}</td></tr></table>`;
 
   const logoCell = logo
     ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
@@ -768,12 +788,16 @@ export function buildSignatureHtml(
           </tr></table>
         </td>
       </tr></table>`
-    : `<img src="${logoMonogramDataUri(mono)}" width="56" height="56" alt="${company}" border="0" style="display:block;border:0;width:56px;height:56px;" />`;
+    : `<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td width="56" height="56" align="center" valign="middle" bgcolor="#16a34a" style="width:56px;height:56px;background:#16a34a;border-radius:50%;"><table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td width="48" height="48" align="center" valign="middle" bgcolor="#ffffff" style="width:48px;height:48px;background:#ffffff;border-radius:50%;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:800;color:#2437ff;">${escape(mono)}</td></tr></table></td></tr></table>`;
 
   const socialIcons = socials
     .map(
-      (s) =>
-        `<a href="${escape(s.url)}" style="text-decoration:none;border:0;"><img src="${icon(s.network as SignatureIconName)}" width="16" height="16" alt="" border="0" style="display:inline-block;border:0;outline:none;width:16px;height:16px;margin:0 12px 0 0;" /></a>`,
+      (s, i) =>
+        `<td align="center" valign="middle" style="padding:0 ${i === socials.length - 1 ? '0' : '14px'} 0 0;font-size:0;line-height:0;border:0;">
+          <a href="${escape(s.url)}" style="text-decoration:none;border:0;display:block;line-height:0;font-size:0;">
+            <img src="${SIGNATURE_ICON_DATA_URIS[s.network as SignatureIconName]}" width="16" height="16" alt="" border="0" style="display:block;border:0;outline:none;width:16px;height:16px;margin:0;" />
+          </a>
+        </td>`,
     )
     .join('');
 
@@ -794,7 +818,7 @@ export function buildSignatureHtml(
         </tr>
         <tr><td height="1" bgcolor="#eef1f5" style="font-size:0;line-height:0;height:1px;">&nbsp;</td></tr>
         <tr>
-          <td style="padding:12px 16px 2px 16px;">
+          <td style="padding:10px 16px 0 16px;">
             <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
               <tr>
                 <td width="176" valign="top" style="width:176px;">${leftRows}</td>
@@ -804,15 +828,20 @@ export function buildSignatureHtml(
             </table>
           </td>
         </tr>
-        <tr><td height="1" bgcolor="#eef1f5" style="font-size:0;line-height:0;height:1px;">&nbsp;</td></tr>
         <tr>
-          <td style="padding:0;">
-            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;">
+          <td style="padding:0;margin:0;border-top:1px solid #eef1f5;font-size:0;line-height:0;">
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" height="40" style="border-collapse:collapse;width:100%;height:40px;mso-table-lspace:0pt;mso-table-rspace:0pt;">
               <tr>
-                <td valign="middle" style="padding:10px 8px 4px 14px;">${socialIcons || '&nbsp;'}</td>
-                <td width="128" align="right" valign="bottom" style="width:128px;padding:0;line-height:0;font-size:0;">
-                  <a href="${cardUrl}" style="display:block;text-decoration:none;border:0;line-height:0;">
-                    <img src="${SAVE_CONTACT_BTN_DATA_URI}" width="128" height="40" alt="Save Contact" border="0" style="display:block;border:0;outline:none;text-decoration:none;width:128px;height:40px;margin:0;" />
+                <td valign="middle" height="40" style="vertical-align:middle;height:40px;padding:0 0 0 14px;margin:0;font-size:0;line-height:0;border:0;">
+                  <table role="presentation" cellspacing="0" cellpadding="0" border="0" height="40" style="border-collapse:collapse;height:40px;">
+                    <tr>
+                      ${socialIcons || '<td height="40" style="height:40px;font-size:0;line-height:0;border:0;">&nbsp;</td>'}
+                    </tr>
+                  </table>
+                </td>
+                <td width="128" valign="top" height="40" align="right" style="vertical-align:top;width:128px;height:40px;padding:0;margin:0;font-size:0;line-height:0;border:0;">
+                  <a href="${cardUrl}" style="display:block;text-decoration:none;border:0;line-height:0;font-size:0;">
+                    <img src="${SAVE_CONTACT_BTN_DATA_URI}" width="128" height="40" alt="Save Contact" border="0" style="display:block;border:0;outline:none;text-decoration:none;width:128px;height:40px;margin:0;padding:0;" />
                   </a>
                 </td>
               </tr>
