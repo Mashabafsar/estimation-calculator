@@ -12,6 +12,7 @@ import { TemplatesPage } from './pages/TemplatesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { PageLoader } from './components/Loader';
 import { SignaturesPage } from './pages/SignaturesPage';
+import { SignatureFormPage } from './pages/SignatureFormPage';
 import { SharedSignaturePage } from './pages/SharedSignaturePage';
 
 
@@ -45,6 +46,8 @@ export default function App() {
             <Route path="clients" element={<ClientsPage />} />
             <Route path="templates" element={<TemplatesPage />} />
             <Route path="signatures" element={<SignaturesPage />} />
+            <Route path="signatures/new" element={<SignatureFormPage />} />
+            <Route path="signatures/:id/edit" element={<SignatureFormPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Routes>

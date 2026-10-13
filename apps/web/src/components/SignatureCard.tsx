@@ -298,16 +298,6 @@ export function SignatureCard({ data, saveHref, compact }: Props) {
               </a>
             </Row>
           ) : null}
-          {(data.reportsTo.trim() || data.directLine.trim()) ? (
-            <Row icon="phone" meta="direct line">
-              <a
-                className="hover:text-[#2437ff]"
-                href={`tel:${(data.reportsTo.trim() || data.directLine.trim()).replace(/[^\d+]/g, '')}`}
-              >
-                {data.reportsTo.trim() || data.directLine.trim()}
-              </a>
-            </Row>
-          ) : null}
           {data.email ? (
             <Row icon="email">
               <a className="hover:text-[#2437ff] break-all" href={`mailto:${data.email}`}>

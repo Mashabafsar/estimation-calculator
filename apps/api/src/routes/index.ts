@@ -631,6 +631,18 @@ router.post(
   }),
 );
 
+router.get(
+  '/signatures/:id',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    const isAdmin = req.user!.role === UserRole.ADMIN;
+    res.json({
+      success: true,
+      data: await signaturesService.getSignature(req.params.id, req.user!.id, isAdmin),
+    });
+  }),
+);
+
 router.put(
   '/signatures/:id',
   authenticate,

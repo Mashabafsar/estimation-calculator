@@ -370,6 +370,13 @@ export async function listSignatures(userId: string, isAdmin = false) {
   return rows.map(serialize);
 }
 
+export async function getSignature(id: string, userId: string, isAdmin = false) {
+  const row = await prisma.emailSignature.findUnique({ where: { id } });
+  if (!row) throw new AppError('Signature not found', 404);
+  if (!isAdmin && row.createdById !== userId) throw new AppError('Forbidden', 403);
+  return serialize(row);
+}
+
 export async function createSignature(userId: string, input: SignatureInput) {
   const row = await prisma.emailSignature.create({
     data: {
@@ -614,7 +621,6 @@ export async function buildSignatureImageHtml(
   const leftRows: Array<[SignatureIconName, string, string]> = [];
   if (address.length) leftRows.push(['location', address[0], address[1] || '']);
   if (data.cellPhone) leftRows.push(['phone', `${data.cellPhone}  mobile`, '']);
-  if (directLine) leftRows.push(['phone', `${directLine}  direct line`, '']);
   if (data.email) leftRows.push(['email', data.email, '']);
 
   const rightRows: Array<[SignatureIconName, string]> = [];
@@ -787,12 +793,6 @@ export function buildSignatureHtml(
       ? contactRow(
           'phone',
           linkedText(`tel:${data.cellPhone.replace(/[^\d+]/g, '')}`, withMeta(data.cellPhone, 'mobile')),
-        )
-      : '',
-    directLine
-      ? contactRow(
-          'phone',
-          linkedText(`tel:${directLine.replace(/[^\d+]/g, '')}`, withMeta(directLine, 'direct line')),
         )
       : '',
     data.email
