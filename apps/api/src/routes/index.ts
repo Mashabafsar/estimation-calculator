@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { z } from 'zod';
 import { config } from '../config/index.js';
 import { asyncHandler } from '../utils/errors.js';
@@ -12,6 +12,7 @@ import * as estimatesService from '../services/estimates.service.js';
 import * as dashboardService from '../services/dashboard.service.js';
 import * as hoursSourceService from '../services/hoursSource.service.js';
 import * as signaturesService from '../services/signatures.service.js';
+import * as signatureMedia from '../services/signature-media.service.js';
 
 import {
   ApprovalAction,
@@ -554,7 +555,7 @@ router.get(
   '/signatures/share/:slug/vcard',
   asyncHandler(async (req, res) => {
     const data = await signaturesService.getByShareSlug(req.params.slug);
-    const vcard = signaturesService.buildVcard(data);
+    const vcard = await signaturesService.buildVcard(data);
     const filename = `${[data.firstName, data.lastName].filter(Boolean).join('-') || 'contact'}.vcf`;
     res.setHeader('Content-Type', 'text/vcard; charset=utf-8');
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
@@ -569,6 +570,22 @@ router.get(
   asyncHandler(async (req, res) => {
     const isAdmin = req.user!.role === UserRole.ADMIN;
     res.json({ success: true, data: await signaturesService.listSignatures(req.user!.id, isAdmin) });
+  }),
+);
+
+router.post(
+  '/signatures/upload',
+  authenticate,
+  requireWrite,
+  express.raw({ type: () => true, limit: '10mb' }),
+  asyncHandler(async (req, res) => {
+    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
+    const saved = await signatureMedia.saveSignatureImage({
+      buffer,
+      contentType: req.headers['content-type'],
+      filename: typeof req.headers['x-filename'] === 'string' ? req.headers['x-filename'] : null,
+    });
+    res.status(201).json({ success: true, data: saved });
   }),
 );
 

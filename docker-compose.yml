@@ -35,8 +35,11 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-estimation}:${POSTGRES_PASSWORD:-estimation}@estimation-db:5432/${POSTGRES_DB:-estimation}?schema=public
       API_PORT: "4001"
       API_HOST: "0.0.0.0"
+      SIGNATURE_UPLOAD_DIR: /app/apps/api/uploads
     ports:
       - "4001:4001"
+    volumes:
+      - signature_uploads:/app/apps/api/uploads
     networks:
       - estimation
     depends_on:
@@ -65,3 +68,4 @@ networks:
 
 volumes:
   estimation_pgdata:
+  signature_uploads:

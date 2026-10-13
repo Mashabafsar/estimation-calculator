@@ -265,7 +265,7 @@ export function SignatureCard({ data, saveHref, compact }: Props) {
         <ul className="space-y-2.5 min-w-0">
           <li className="flex gap-2.5 items-start">
             <ContactIcon type="location" />
-            <div className="min-w-0 pt-0.5 text-[9px] leading-[12px] text-[#111827]">
+            <div className="min-w-0 break-words pt-0.5 text-[9px] leading-[12px] text-[#111827]">
               {addressLines.map((line, i) => {
                 const isLast = i === addressLines.length - 1 && addressLines.length > 1;
                 const workIdx = line.lastIndexOf(' work');
@@ -273,7 +273,7 @@ export function SignatureCard({ data, saveHref, compact }: Props) {
                 return (
                   <div
                     key={`${line}-${i}`}
-                    className={isLast ? 'text-[#4b5563]' : undefined}
+                    className={`break-words ${isLast ? 'text-[#4b5563]' : ''}`}
                   >
                     {hasWork ? (
                       <>

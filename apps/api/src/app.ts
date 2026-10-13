@@ -6,13 +6,17 @@ import { config } from './config/index.js';
 import routes from './routes/index.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { auditLog } from './middleware/audit.js';
+import { signatureUploadsRoot } from './services/signature-media.service.js';
 
 export function createApp() {
   const app = express();
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.use(cors({ origin: config.corsOrigin, credentials: true }));
-  // Photo + logo as base64 can each expand ~4/3 past the 10MB file limit.
-  app.use(express.json({ limit: '30mb' }));
+  app.use(express.json({ limit: '2mb' }));
 
   app.use(morgan(config.env === 'production' ? 'combined' : 'dev'));
   app.use(auditLog);
@@ -20,6 +24,17 @@ export function createApp() {
   app.get('/health', (_req, res) => {
     res.json({ ok: true, service: config.appName, env: config.env });
   });
+
+  app.use(
+    '/api/uploads',
+    express.static(signatureUploadsRoot(), {
+      fallthrough: false,
+      maxAge: '7d',
+      setHeaders(res) {
+        res.setHeader('Cache-Control', 'public, max-age=604800');
+      },
+    }),
+  );
 
   app.use('/api', routes);
   app.use(notFound);

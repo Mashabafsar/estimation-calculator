@@ -188,21 +188,35 @@ export function socialCardRows(data: SignatureForm) {
   return rows;
 }
 
-export function readImageFile(file: File, maxBytes = 10_000_000): Promise<string> {
-  return new Promise((resolve, reject) => {
-    if (!file.type.startsWith('image/')) {
-      reject(new Error('Please choose an image file'));
-      return;
-    }
-    if (file.size > maxBytes) {
-      reject(new Error('Image must be under 10MB'));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('Failed to read image'));
-    reader.readAsDataURL(file);
+const API_URL = import.meta.env.VITE_API_URL || '/api';
+
+export async function uploadSignatureImage(file: File, token: string, maxBytes = 10_000_000) {
+  if (!file.type.startsWith('image/') && !file.name.toLowerCase().endsWith('.svg')) {
+    throw new Error('Please choose an image file');
+  }
+  if (file.size > maxBytes) {
+    throw new Error('Image must be under 10MB');
+  }
+
+  const res = await fetch(`${API_URL}/signatures/upload`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': file.type || 'application/octet-stream',
+      'X-Filename': file.name,
+    },
+    body: file,
   });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(json.message || 'Image upload failed');
+  }
+  const url = json?.data?.url || json?.url;
+  if (!url || typeof url !== 'string') {
+    throw new Error('Image upload failed');
+  }
+  return url as string;
 }
 
 function htmlToPlainSignature(html: string) {
