@@ -456,15 +456,23 @@ export async function buildVcard(data: SignatureDto) {
   const website2 = normalizeUrl(data.website2);
   const customLink = normalizeUrl(data.customLinkUrl);
 
-  // Labeled URLs show the link in Apple Contacts; X-SOCIALPROFILE alone often
-  // blanks Instagram/YouTube (especially youtube.com/@ handles).
-  let urlItem = 1;
-  const labeledUrls: string[] = [];
+  // Labeled fields show custom titles in Apple Contacts.
+  let item = 1;
+  const labeled: string[] = [];
   const pushLabeledUrl = (label: string, url: string) => {
-    const n = urlItem++;
-    labeledUrls.push(`item${n}.URL:${escapeVcard(url)}`);
-    labeledUrls.push(`item${n}.X-ABLabel:${escapeVcard(label)}`);
+    const n = item++;
+    labeled.push(`item${n}.URL:${escapeVcard(url)}`);
+    labeled.push(`item${n}.X-ABLabel:${escapeVcard(label)}`);
   };
+  const pushRelatedName = (label: string, name: string) => {
+    const n = item++;
+    labeled.push(`item${n}.X-ABRELATEDNAMES:${escapeVcard(name)}`);
+    labeled.push(`item${n}.X-ABLabel:${escapeVcard(label)}`);
+  };
+
+  // reportsTo is the person this contact reports to (not a phone number).
+  const reportsTo = (data.reportsTo.trim() || data.directLine.trim()).trim();
+  if (reportsTo) pushRelatedName('Direct Line', reportsTo);
 
   if (companyUrl) pushLabeledUrl('work', companyUrl);
   if (website2) pushLabeledUrl('website', website2);
@@ -481,13 +489,10 @@ export async function buildVcard(data: SignatureDto) {
     photo,
     `ORG:${escapeVcard(data.companyName)}`,
     data.jobTitle ? `TITLE:${escapeVcard(data.jobTitle)}` : null,
-    (data.reportsTo || data.directLine)
-      ? `TEL;TYPE=WORK,VOICE:${escapeVcard(data.reportsTo || data.directLine)}`
-      : null,
     data.cellPhone ? `TEL;TYPE=CELL,VOICE:${escapeVcard(data.cellPhone)}` : null,
     data.email ? `EMAIL;TYPE=INTERNET,WORK:${escapeVcard(data.email)}` : null,
     `ADR;TYPE=WORK:;;${escapeVcard(data.companyStreet)};${escapeVcard(data.companyCity)};${escapeVcard(data.companyRegion)};${escapeVcard(data.companyPostal)};`,
-    ...labeledUrls,
+    ...labeled,
     'END:VCARD',
   ].filter(Boolean);
 
